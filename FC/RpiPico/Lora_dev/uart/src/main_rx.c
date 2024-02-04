@@ -29,13 +29,9 @@ int main()
     SetDioIrqParams(0b0100000001100010, 0, 0, 0);
     SetRx(0x02, 0xFFFF);
 
-    uint8_t irq;
-    buff_t rxBuffStatus;
-    buff_t msg;
-
     while (true)
     {
-        irq = GetIrqStatus();
+        uint8_t irq = GetIrqStatus();
 
         if (irq & 0x02)
         {
@@ -53,12 +49,12 @@ int main()
             }
             else
             {
-                rxBuffStatus = GetRxBufferStatus();
-                msg = ReadBuffer(rxBuffStatus.data[0]);
+                buff_t rxBuffStatus = GetRxBufferStatus();
+                buff_t msg = ReadBuffer(rxBuffStatus.data[0]);
                 printf("New msg [%d]: ", msg.len);
                 for (int i = 0; i < msg.len; i++)
                 {
-                    printf("%c", msg.data[i]);
+                    printf("%c", (char)msg.data[i]);
                 }
                 printf("\n");
             }

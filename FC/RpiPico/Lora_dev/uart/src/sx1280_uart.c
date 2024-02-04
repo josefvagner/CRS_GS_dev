@@ -2,24 +2,30 @@
 
 void sx1280UartInit()
 {
-    uart_init(UART_ID, BAUD_RATE);
-    gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
-    gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
-    gpio_set_function(UART_CTS_PIN, GPIO_FUNC_UART);
-    gpio_set_function(UART_RTS_PIN, GPIO_FUNC_UART);
-    uart_set_fifo_enabled(UART_ID, true);
-    uart_set_hw_flow(UART_ID, true, true);
-    uart_set_format(UART_ID, DATA_BITS, STOP_BITS, PARITY);
-
     gpio_init(RESET_PIN);
+    gpio_init(BUSY_PIN);
+    gpio_init(UART_RTS_PIN);
+
     gpio_set_dir(RESET_PIN, GPIO_OUT);
+    gpio_set_dir(BUSY_PIN, GPIO_IN);
+    gpio_set_dir(UART_RTS_PIN, GPIO_OUT);
+
     gpio_put(RESET_PIN, false);
     gpio_put(UART_RTS_PIN, false);
     sleep_ms(50);
     gpio_put(RESET_PIN, true);
 
-    gpio_init(BUSY_PIN);
-    gpio_set_dir(BUSY_PIN, GPIO_IN);
+    // gpio_deinit(UART_RTS_PIN);
+
+    gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
+    gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
+    gpio_set_function(UART_CTS_PIN, GPIO_FUNC_UART);
+    gpio_set_function(UART_RTS_PIN, GPIO_FUNC_UART);
+
+    uart_init(UART_ID, BAUD_RATE);
+    uart_set_hw_flow(UART_ID, false, false);
+    uart_set_fifo_enabled(UART_ID, false);
+    uart_set_format(UART_ID, DATA_BITS, STOP_BITS, PARITY);
 }
 
 void waitBusyPin()

@@ -45,8 +45,7 @@ int main()
     uint8_t msgTxt[4] = {'R',
                          'P',
                          ' ',
-                         msgId};
-    buff_t msg = {msgTxt, 4};
+                         msgId + '0'};
     uint16_t irq = 0;
 
     uint8_t pt = GetPacketType();
@@ -55,7 +54,8 @@ int main()
     while (true)
     {
         printf("loop\n");
-        msgTxt[3] = msgId;
+        msgTxt[3] = msgId + '0';
+        buff_t msg = {msgTxt, 4};
         WriteBuffer(msg);
         SetTx(0x02, 0x01F4);
         while (true)
@@ -64,7 +64,12 @@ int main()
             printf("irq %u\n", irq);
             if (irq & 0x01)
             {
-                printf("Tx done: RP_%d\n", msgId);
+                printf("Tx done: ");
+                for (int i = 0; i < msg.len; i++)
+                {
+                    printf("%c", (char)msg.data[i]);
+                }
+                printf("\n");
                 break;
             }
             if (irq & 0b0100000000000000)
@@ -77,7 +82,7 @@ int main()
         ClrIrqStatus(0xFFFF);
         SetStandby(0x00);
         sleep_ms(3000);
-        msgId = msgId >= 100 ? 0 : msgId + 1;
+        msgId = msgId >= 9 ? 0 : msgId + 1;
     }
     printf("end\n");
 }
