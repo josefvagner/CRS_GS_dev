@@ -49,6 +49,9 @@ int main()
     buff_t msg = {msgTxt, 4};
     uint16_t irq = 0;
 
+    uint8_t pt = GetPacketType();
+    printf("packet type %u\n", pt);
+
     while (true)
     {
         printf("loop\n");
@@ -57,8 +60,8 @@ int main()
         SetTx(0x02, 0x01F4);
         while (true)
         {
-            printf("loop 1\n");
             irq = GetIrqStatus();
+            printf("irq %u\n", irq);
             if (irq & 0x01)
             {
                 printf("Tx done: RP_%d\n", msgId);

@@ -8,4 +8,4 @@ docker-build:
 
 ## Mount host file system and run the docker image
 docker-run: 
-	docker run --rm -v "$(PWD):/home/dev" rpi/pico:latest
+	docker run --rm -it -v "$(PWD):/home/dev" --name sx1280_dev rpi/pico:latest

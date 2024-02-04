@@ -7,10 +7,15 @@ void sx1280UartInit()
     gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
     gpio_set_function(UART_CTS_PIN, GPIO_FUNC_UART);
     gpio_set_function(UART_RTS_PIN, GPIO_FUNC_UART);
+    uart_set_fifo_enabled(UART_ID, true);
     uart_set_hw_flow(UART_ID, true, true);
+    uart_set_format(UART_ID, DATA_BITS, STOP_BITS, PARITY);
 
     gpio_init(RESET_PIN);
     gpio_set_dir(RESET_PIN, GPIO_OUT);
+    gpio_put(RESET_PIN, false);
+    gpio_put(UART_RTS_PIN, false);
+    sleep_ms(50);
     gpio_put(RESET_PIN, true);
 
     gpio_init(BUSY_PIN);
@@ -25,8 +30,19 @@ void waitBusyPin()
     }
 }
 
+void printBuff(buff_t buff)
+{
+    for (int i = 0; i < buff.len; i++)
+    {
+        printf("%u ", buff.data[i]);
+    }
+    printf("\n");
+}
+
 void uartSend(buff_t buff)
 {
+    printf("sending buff: ");
+    printBuff(buff);
     uart_write_blocking(UART_ID, buff.data, buff.len);
 
     while (gpio_get(BUSY_PIN) == 1)
@@ -50,17 +66,17 @@ buff_t uartSendRecv(buff_t buff, size_t responseLen)
     buff_t ret;
     ret.data = response;
     ret.len = responseLen;
-    printf("uart send \n");
-    uart_write_blocking(UART_ID, buff.data, buff.len * sizeof(uint8_t));
-    printf("uart recv \n");
+    uart_write_blocking(UART_ID, buff.data, buff.len);
     uart_read_blocking(UART_ID, ret.data, ret.len);
 
     while (gpio_get(BUSY_PIN) == 1)
     {
-        printf("b ");
         sleep_ms(100);
     }
-    printf("\n");
+    printf("sending buff: ");
+    printBuff(buff);
+    printf("recieving buff: ");
+    printBuff(ret);
 
     return ret;
 }
@@ -70,7 +86,7 @@ uint8_t GetStatus()
     uint8_t data[1] = {GET_STATUS};
     buff_t sendBuff = {data, 1};
     buff_t ret = uartSendRecv(sendBuff, 1);
-    return *(ret.data);
+    return ret.data[0];
 }
 
 void WriteRegister(uint16_t addr, buff_t buff)
@@ -78,8 +94,8 @@ void WriteRegister(uint16_t addr, buff_t buff)
     size_t len = buff.len + 4;
     uint8_t data[len];
     data[0] = WRITE_REGISTER;
-    data[1] = addr & 0xff;
-    data[2] = (addr >> 8) & 0xff;
+    data[1] = (uint8_t)(addr >> 8);
+    data[2] = (uint8_t)addr;
     data[3] = (uint8_t)buff.len;
     myMemcpy(data + 4, buff.data, buff.len);
     buff_t sendBuff = {data, len};
@@ -90,8 +106,8 @@ buff_t ReadRegister(uint16_t addr, size_t n)
 {
     uint8_t data[4] = {
         READ_REGISTER,
-        addr & 0xff,
-        (addr >> 8) & 0xff,
+        (uint8_t)(addr >> 8),
+        (uint8_t)addr,
         (uint8_t)n};
     buff_t sendBuff = {data, 4};
     buff_t ret = uartSendRecv(sendBuff, n);
@@ -104,7 +120,7 @@ void WriteBuffer(buff_t buff)
     uint8_t data[len];
     data[0] = WRITE_BUFFER;
     data[1] = TX_BASE_ADDR;
-    data[3] = (uint8_t)buff.len;
+    data[2] = (uint8_t)buff.len;
     myMemcpy(data + 3, buff.data, buff.len);
     buff_t sendBuff = {data, len};
     uartSend(sendBuff);
@@ -148,8 +164,8 @@ void SetTx(uint8_t periodBase, uint16_t periodBaseCount)
         SET_TX,
         0x03,
         periodBase,
-        (uint8_t)(periodBaseCount & 0xff),
-        (uint8_t)((periodBaseCount >> 8) & 0xff)};
+        (uint8_t)(periodBaseCount >> 8),
+        (uint8_t)periodBaseCount};
     buff_t sendBuff = {data, 5};
     uartSend(sendBuff);
 }
@@ -160,8 +176,8 @@ void SetRx(uint8_t periodBase, uint16_t periodBaseCount)
         SET_RX,
         0x03,
         periodBase,
-        (uint8_t)(periodBaseCount & 0xff),
-        (uint8_t)((periodBaseCount >> 8) & 0xff)};
+        (uint8_t)(periodBaseCount >> 8),
+        (uint8_t)periodBaseCount};
     buff_t sendBuff = {data, 5};
     uartSend(sendBuff);
 }
@@ -172,11 +188,10 @@ void SetRxDutyCycle(uint8_t periodBase, uint16_t rxPeriodBaseCount, uint16_t sle
         SET_RX_DUTY_CYCLE,
         0x05,
         periodBase,
-        (uint8_t)(rxPeriodBaseCount & 0xff),
-        (uint8_t)((rxPeriodBaseCount >> 8) & 0xff),
-        (uint8_t)(sleepPeriodBaseCount & 0xff),
-        (uint8_t)((sleepPeriodBaseCount >> 8) & 0xff),
-    };
+        (uint8_t)(rxPeriodBaseCount >> 8),
+        (uint8_t)rxPeriodBaseCount,
+        (uint8_t)(sleepPeriodBaseCount >> 8),
+        (uint8_t)sleepPeriodBaseCount};
     buff_t sendBuff = {data, 8};
     uartSend(sendBuff);
 }
@@ -214,7 +229,7 @@ uint8_t GetPacketType()
     uint8_t data[2] = {GET_PACKET_TYPE, 0x01};
     buff_t sendBuff = {data, 2};
     buff_t ret = uartSendRecv(sendBuff, 1);
-    return *ret.data;
+    return ret.data[0];
 }
 
 void SetRfFrequency(uint8_t rfFrequency[3])
@@ -311,7 +326,7 @@ uint8_t GetRssiLnst()
     uint8_t data[2] = {GET_RSSI_LNST, 0x01};
     buff_t sendBuff = {data, 2};
     buff_t ret = uartSendRecv(sendBuff, 1);
-    return *ret.data;
+    return ret.data[0];
 }
 
 void SetDioIrqParams(uint16_t irqMask, uint16_t dio1Mask, uint16_t dio2Mask, uint16_t dio3Mask)
@@ -319,14 +334,14 @@ void SetDioIrqParams(uint16_t irqMask, uint16_t dio1Mask, uint16_t dio2Mask, uin
     uint8_t data[10] = {
         SET_DIO_IRQ_PARAMS,
         0x08,
-        (uint8_t)(irqMask & 0xff),
-        (uint8_t)((irqMask >> 8) & 0xff),
-        (uint8_t)(dio1Mask & 0xff),
-        (uint8_t)((dio1Mask >> 8) & 0xff),
-        (uint8_t)(dio2Mask & 0xff),
-        (uint8_t)((dio2Mask >> 8) & 0xff),
-        (uint8_t)(dio3Mask & 0xff),
-        (uint8_t)((dio3Mask >> 8) & 0xff)};
+        (uint8_t)(irqMask >> 8),
+        (uint8_t)irqMask,
+        (uint8_t)(dio1Mask >> 8),
+        (uint8_t)dio1Mask,
+        (uint8_t)(dio2Mask >> 8),
+        (uint8_t)dio2Mask,
+        (uint8_t)(dio3Mask >> 8),
+        (uint8_t)dio3Mask};
     buff_t sendBuff = {data, 10};
     uartSend(sendBuff);
 }
@@ -336,7 +351,8 @@ uint16_t GetIrqStatus()
     uint8_t data[2] = {GET_IRQ_STATUS, 0x02};
     buff_t sendBuff = {data, 2};
     buff_t ret = uartSendRecv(sendBuff, 2);
-    return (uint16_t)((ret.data[0] << 8) | ret.data[1]);
+    uint16_t irq = ((uint16_t)ret.data[0] << 8) | ret.data[1];
+    return irq;
 }
 
 void ClrIrqStatus(uint16_t irqMask)
@@ -344,8 +360,8 @@ void ClrIrqStatus(uint16_t irqMask)
     uint8_t data[4] = {
         CLR_IRQ_STATUS,
         0x02,
-        (uint8_t)(irqMask & 0xff),
-        (uint8_t)((irqMask >> 8) & 0xff)};
+        (uint8_t)(irqMask >> 8),
+        (uint8_t)(irqMask)};
     buff_t sendBuff = {data, 4};
     uartSend(sendBuff);
 }
@@ -376,8 +392,8 @@ void SetAutoTx(uint8_t time)
     uint8_t data[4] = {
         SET_AUTO_TX,
         0x02,
-        (uint8_t)(time & 0xff),
-        (uint8_t)((time >> 8) & 0xff)};
+        (uint8_t)(time >> 8),
+        (uint8_t)time};
     buff_t sendBuff = {data, 4};
     uartSend(sendBuff);
 }
