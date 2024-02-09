@@ -5,7 +5,9 @@
 
 int main()
 {
+    sleep_ms(2000);
     stdio_init_all();
+    sleep_ms(1000);
     printf("starting....RX\n");
     sx1280UartInit();
     waitBusyPin();
@@ -29,6 +31,11 @@ int main()
     SetDioIrqParams(0b0100000001100010, 0, 0, 0);
     SetRx(0x02, 0xFFFF);
 
+    uint8_t rxBuffStatus[2];
+
+    uint8_t pt = GetPacketType();
+    printf("packet type %u\n", pt);
+
     while (true)
     {
         uint8_t irq = GetIrqStatus();
@@ -49,14 +56,11 @@ int main()
             }
             else
             {
-                buff_t rxBuffStatus = GetRxBufferStatus();
-                buff_t msg = ReadBuffer(rxBuffStatus.data[0]);
-                printf("New msg [%d]: ", msg.len);
-                for (int i = 0; i < msg.len; i++)
-                {
-                    printf("%c", (char)msg.data[i]);
-                }
-                printf("\n");
+                GetRxBufferStatus(rxBuffStatus);
+                uint8_t msg[rxBuffStatus[0]];
+                ReadBuffer(msg, (size_t)rxBuffStatus[0], rxBuffStatus[1]);
+                printf("New msg [%d]: ", (int)rxBuffStatus[0]);
+                printBuffChar(msg, (size_t)rxBuffStatus[0]);
             }
             ClrIrqStatus(0xFFFF);
         }

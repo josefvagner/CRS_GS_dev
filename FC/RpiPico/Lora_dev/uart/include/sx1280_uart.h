@@ -2,6 +2,7 @@
 #define SX1280_UART_H
 
 #include <stdio.h>
+#include <stdlib.h>
 #include "pico/stdlib.h"
 #include "hardware/uart.h"
 
@@ -296,26 +297,25 @@
 
 #define SET_PERF_COUNTER_MODE 0x9C
 
-typedef struct Buffer
-{
-    uint8_t *data;
-    size_t len;
-
-} buff_t;
-
 void sx1280UartInit();
 
-void uartSend(buff_t buff);
-buff_t uartSendRecv(buff_t buff, size_t responseLen);
+void initBuffer(uint8_t *buff, size_t len);
+void resizeBuffer(uint8_t *buff, size_t newLen);
+void myMemcpy(void *dest, void *src, size_t len);
+
+void uartSend(uint8_t *buff, size_t len);
+void uartSendRecv(uint8_t *msgBuff, size_t msgLen, uint8_t *recvBuff, size_t recvLen);
 void waitBusyPin();
 
-void myMemcpy(void *dest, void *src, size_t n);
+void printBuffHex(uint8_t *buff, size_t len);
+void printBuffDec(uint8_t *buff, size_t len);
+void printBuffChar(uint8_t *buff, size_t len);
 
 uint8_t GetStatus();
-void WriteRegister(uint16_t addr, buff_t buff);
-buff_t ReadRegister(uint16_t addr, size_t n);
-void WriteBuffer(buff_t buff);
-buff_t ReadBuffer(uint8_t n);
+void WriteRegister(uint16_t addr, uint8_t *data, size_t len);
+void ReadRegister(uint8_t *recv, size_t len, uint16_t addr);
+void WriteBuffer(uint8_t *data, size_t len);
+void ReadBuffer(uint8_t *recv, size_t len, uint8_t addr);
 void SetSleep(uint8_t sleepConfig);
 void SetStandby(uint8_t standbyConfig);
 void SetFs();
@@ -333,8 +333,8 @@ void SetCadParams(uint8_t cadSymbolNum);
 void SetBufferBaseAddress(uint8_t txBaseAddress, uint8_t rxBaseAddress);
 void SetModulationParams(uint8_t modParam[3]);
 void SetPacketParams(uint8_t packetParams[7]);
-buff_t GetRxBufferStatus();
-buff_t GetPacketStatus();
+void GetRxBufferStatus(uint8_t recv[2]);
+void GetPacketStatus(uint8_t recv[5]);
 uint8_t GetRssiLnst();
 void SetDioIrqParams(uint16_t irqMask, uint16_t dio1Mask, uint16_t dio2Mask, uint16_t dio3Mask);
 uint16_t GetIrqStatus();

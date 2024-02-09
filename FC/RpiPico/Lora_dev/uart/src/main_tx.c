@@ -5,6 +5,7 @@
 
 int main()
 {
+    sleep_ms(2000);
     stdio_init_all();
     sleep_ms(1000);
     printf("starting....TX\n");
@@ -53,23 +54,16 @@ int main()
 
     while (true)
     {
-        printf("loop\n");
         msgTxt[3] = msgId + '0';
-        buff_t msg = {msgTxt, 4};
-        WriteBuffer(msg);
+        WriteBuffer(msgTxt, 4);
         SetTx(0x02, 0x01F4);
         while (true)
         {
             irq = GetIrqStatus();
-            printf("irq %u\n", irq);
             if (irq & 0x01)
             {
                 printf("Tx done: ");
-                for (int i = 0; i < msg.len; i++)
-                {
-                    printf("%c", (char)msg.data[i]);
-                }
-                printf("\n");
+                printBuffChar(msgTxt, 4);
                 break;
             }
             if (irq & 0b0100000000000000)
@@ -81,7 +75,7 @@ int main()
         }
         ClrIrqStatus(0xFFFF);
         SetStandby(0x00);
-        sleep_ms(3000);
+        sleep_ms(1000);
         msgId = msgId >= 9 ? 0 : msgId + 1;
     }
     printf("end\n");
