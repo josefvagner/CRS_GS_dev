@@ -6,20 +6,21 @@ Constants for UART communication and SX1280 commands.
 
 import serial
 from gpiozero import DigitalInputDevice, DigitalOutputDevice
+from time import sleep
 
-UART_ID = "ttyAMA0"
+UART_ID = "/dev/ttyAMA0"
 BAUD_RATE = 115200
 DATA_BITS = serial.EIGHTBITS
 STOP_BITS = serial.STOPBITS_ONE
 PARITY = serial.PARITY_EVEN
 
 # Pin assignments
-UART_TX_PIN = 12
-UART_RX_PIN = 13
-UART_CTS_PIN = 14
-UART_RTS_PIN = 15
-BUSY_PIN = 26
-RESET_PIN = 8
+UART_TX_PIN = 14
+UART_RX_PIN = 15
+UART_CTS_PIN = 16
+UART_RTS_PIN = 17
+BUSY_PIN = 5
+RESET_PIN = 10
 
 RX_BASE_ADDR = b'\x00'
 TX_BASE_ADDR = b'\x80'
@@ -70,10 +71,19 @@ SET_RANGING_ROLE = b'\xA3'
 SET_ADVANCED_RANGING = b'\x9A'
 SET_PERF_COUNTER_MODE = b'\x9C'
 
-ser = serial.Serial(port=UART_ID, baudrate=BAUD_RATE, bytesize=DATA_BITS, parity=PARITY, stopbits=STOP_BITS, timeout=1, rtscts=True)
+ser = serial.Serial(port=UART_ID, baudrate=BAUD_RATE, bytesize=DATA_BITS, parity=PARITY, stopbits=STOP_BITS, rtscts=False)
 reset = DigitalOutputDevice(RESET_PIN)
 busy = DigitalInputDevice(BUSY_PIN)
+rts = DigitalOutputDevice(UART_RTS_PIN)
 
+def initLora():
+    reset.off()
+    rts.off()
+    #ser.set_output_flow_control(True)
+    sleep(2)
+    reset.on()
+    waitBusyPin()
+    
 
 def waitBusyPin():
     busy.wait_for_inactive()
@@ -86,7 +96,6 @@ def uartSend(msg: bytes):
 def uartSendRecv(msg: bytes, retLen: int) -> bytes:
     ser.reset_input_buffer()
     ser.reset_output_buffer()
-    
     ser.write(msg)
     return ser.read(retLen)
 
@@ -109,19 +118,19 @@ def SetSleep(sleepConfig: bytes):
     uartSend(SET_SLEEP + sleepConfig)
 
 def SetStandby(standbyConfig: bytes):
-    uartSend(SET_STANDBY + '\x01' + standbyConfig)
+    uartSend(SET_STANDBY + b'\x01' + standbyConfig)
 
 def SetFs():
     uartSend(SET_FS)
 
 def SetTx(periodBase: bytes, periodBaseCount: bytes):
-    uartSend(SET_TX + '\x03' + periodBase + periodBaseCount)
+    uartSend(SET_TX + b'\x03' + periodBase + periodBaseCount)
 
 def SetRx(periodBase: bytes, periodBaseCount: bytes):
-    uartSend(SET_RX + '\x03' + periodBase + periodBaseCount)
+    uartSend(SET_RX + b'\x03' + periodBase + periodBaseCount)
 
 def SetRxDutyCycle(periodBase: bytes, rxPeriodBaseCount: bytes, sleepPeriodBaseCount: bytes):
-    uartSend(SET_RX_DUTY_CYCLE + '\x05' + periodBase + rxPeriodBaseCount + sleepPeriodBaseCount)
+    uartSend(SET_RX_DUTY_CYCLE + b'\x05' + periodBase + rxPeriodBaseCount + sleepPeriodBaseCount)
 
 def SetCad():
     uartSend(SET_CAD)
@@ -133,13 +142,13 @@ def SetTxContinuousPreamble():
     uartSend(SET_TX_CONTINUOUS_PREAMBLE)
 
 def SetPacketType(packetType: bytes):
-    uartSend(SET_PACKET_TYPE + '\x01' + packetType)
+    uartSend(SET_PACKET_TYPE + b'\x01' + packetType)
 
 def GetPacketType() -> bytes:
-    return uartSendRecv(GET_PACKET_TYPE + '\x01', 1)
+    return uartSendRecv(GET_PACKET_TYPE + b'\x01', 1)
 
 def SetRfFrequency(rfFrequency: bytes):
-    uartSend(SET_RF_FREQUENCY + '\x03' + rfFrequency)
+    uartSend(SET_RF_FREQUENCY + b'\x03' + rfFrequency)
 
 def SetTxParams(power: bytes, rampTime: bytes):
     uartSend(SET_TX_PARAMS + b'\x02' + power + rampTime)

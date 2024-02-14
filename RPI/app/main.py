@@ -28,8 +28,9 @@ json_sample = {
 
 
 def getJsonData() -> dict:
-    # TODO: get latest data from communication
-    return json_sample
+    with open("/home/gs/Desktop/CRS_GS_dev/RPI/data.bin", "rb") as fp:
+        data = fp.read()
+    return str(data)
 
 
 @app.get("/")
