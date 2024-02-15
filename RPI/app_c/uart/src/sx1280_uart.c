@@ -56,7 +56,7 @@ void sx1280UartInit()
     struct termios options;
     tcgetattr(uart, &options);
     options.c_cflag = B115200 | CS8 | CLOCAL | CREAD | PARENB; //<Set baud rate
-    options.c_iflag = INPCK | ICRNL | IGNPAR;
+    options.c_iflag = INPCK;
     options.c_oflag = 0;
     options.c_lflag = 0;
     tcflush(uart, TCIOFLUSH);
@@ -119,11 +119,13 @@ void printBuffChar(uint8_t *buff, size_t len)
     printf("%s\n", text);
 }
 
-void uartSend(uint8_t *buff, size_t len)
+void uartSend(uint8_t *buff, uint8_t len)
 {
     // printf("Sending buffer: ");
     // printBuffHex(buff, len);
     // uart_write_blocking(UART_ID, buff, len);
+
+    tcflush(uart, TCIOFLUSH);
 
     if (uart != -1)
     {
@@ -145,7 +147,7 @@ void myMemcpy(void *dest, void *src, size_t len)
         cdest[i] = csrc[i];
 }
 
-void uartSendRecv(uint8_t *msgBuff, size_t msgLen, uint8_t *recvBuff, size_t recvLen)
+void uartSendRecv(uint8_t *msgBuff, uint8_t msgLen, uint8_t *recvBuff, uint8_t recvLen)
 {
     /*
     while (uart_is_readable(UART_ID))
@@ -157,6 +159,8 @@ void uartSendRecv(uint8_t *msgBuff, size_t msgLen, uint8_t *recvBuff, size_t rec
     uart_read_blocking(UART_ID, recvBuff, recvLen);
     */
     tcflush(uart, TCIOFLUSH);
+
+    // printf("UartSendRecv: recvBuff = %d, recvLen = %d\n", recvBuff, recvLen);
 
     if (uart != -1)
     {
@@ -223,10 +227,19 @@ void WriteBuffer(uint8_t *data, size_t len)
     uartSend(msg, len + 3);
 }
 
-void ReadBuffer(uint8_t *recv, size_t len, uint8_t addr)
+void ReadBuffer(uint8_t *recv, uint8_t len, uint8_t addr)
 {
-    uint8_t msg[3] = {READ_BUFFER, addr, (uint8_t)len};
-    uartSendRecv(msg, 3, recv, len);
+    uint8_t toRead = len;
+    uint8_t currRead = 0;
+    uint8_t readed = 0;
+    while (toRead > 0)
+    {
+        currRead = toRead > 8 ? 8 : toRead;
+        uint8_t msg[3] = {READ_BUFFER, addr + readed, currRead};
+        uartSendRecv(msg, 3, recv + readed, currRead);
+        toRead -= currRead;
+        readed += currRead;
+    }
 }
 
 void SetSleep(uint8_t sleepConfig)
@@ -271,7 +284,7 @@ void SetRx(uint8_t periodBase, uint16_t periodBaseCount)
 
 void SetRxDutyCycle(uint8_t periodBase, uint16_t rxPeriodBaseCount, uint16_t sleepPeriodBaseCount)
 {
-    uint8_t msg[8] = {
+    uint8_t msg[7] = {
         SET_RX_DUTY_CYCLE,
         0x05,
         periodBase,
@@ -279,7 +292,7 @@ void SetRxDutyCycle(uint8_t periodBase, uint16_t rxPeriodBaseCount, uint16_t sle
         (uint8_t)rxPeriodBaseCount,
         (uint8_t)(sleepPeriodBaseCount >> 8),
         (uint8_t)sleepPeriodBaseCount};
-    uartSend(msg, 8);
+    uartSend(msg, 7);
 }
 
 void SetCad()
