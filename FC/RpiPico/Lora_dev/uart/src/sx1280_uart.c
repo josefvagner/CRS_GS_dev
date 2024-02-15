@@ -203,7 +203,7 @@ void SetRx(uint8_t periodBase, uint16_t periodBaseCount)
 
 void SetRxDutyCycle(uint8_t periodBase, uint16_t rxPeriodBaseCount, uint16_t sleepPeriodBaseCount)
 {
-    uint8_t msg[8] = {
+    uint8_t msg[7] = {
         SET_RX_DUTY_CYCLE,
         0x05,
         periodBase,
@@ -211,7 +211,7 @@ void SetRxDutyCycle(uint8_t periodBase, uint16_t rxPeriodBaseCount, uint16_t sle
         (uint8_t)rxPeriodBaseCount,
         (uint8_t)(sleepPeriodBaseCount >> 8),
         (uint8_t)sleepPeriodBaseCount};
-    uartSend(msg, 8);
+    uartSend(msg, 7);
 }
 
 void SetCad()
