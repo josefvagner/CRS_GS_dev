@@ -307,8 +307,8 @@ void initBuffer(uint8_t *buff, size_t len);
 void resizeBuffer(uint8_t *buff, size_t newLen);
 void myMemcpy(void *dest, void *src, size_t len);
 
-void uartSend(uint8_t *buff, size_t len);
-void uartSendRecv(uint8_t *msgBuff, size_t msgLen, uint8_t *recvBuff, size_t recvLen);
+void uartSend(uint8_t *buff, uint8_t len);
+void uartSendRecv(uint8_t *msgBuff, uint8_t msgLen, uint8_t *recvBuff, uint8_t recvLen);
 void waitBusyPin();
 
 void printBuffHex(uint8_t *buff, size_t len);
@@ -319,7 +319,7 @@ uint8_t GetStatus();
 void WriteRegister(uint16_t addr, uint8_t *data, size_t len);
 void ReadRegister(uint8_t *recv, size_t len, uint16_t addr);
 void WriteBuffer(uint8_t *data, size_t len);
-void ReadBuffer(uint8_t *recv, size_t len, uint8_t addr);
+void ReadBuffer(uint8_t *recv, uint8_t len, uint8_t addr);
 void SetSleep(uint8_t sleepConfig);
 void SetStandby(uint8_t standbyConfig);
 void SetFs();

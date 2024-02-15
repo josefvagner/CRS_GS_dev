@@ -1,38 +1,32 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
+from json import JSONDecodeError
+import requests
+import json
 
 app = FastAPI()
 
-json_sample = {
-    "gps_sat": 200,
-    "gps_lon": 100.2,
-    "gps_lat": 100.3,
-    "gps_alt": 100.3,
-    "velocity": 100.5,
-    "rel_alti": 234.4,
-    "in_timestamp": 1364.545044,
-    "out_timestamp": 1364.564087,
-    "bmp_pres": 98121.734375,
-    "ina_Curr": 175.699997,
-    "ina_Voltage": 7.784000,
-    "mpu_mag_x": -11.128282,
-    "mpu_mag_y": 23.315508,
-    "mpu_mag_z": 19.417095,
-    "mpu_accel_x": -0.205971,
-    "mpu_accel_y": -9.958491,
-    "mpu_accel_z": 0.253872,
-    "mpu_gyro_x": -2.288818,
-    "mpu_gyro_y": -0.427246,
-    "mpu_gyro_z": 0.732421,
-    "fsw_state": 0,
-}
-
-
-def getJsonData() -> dict:
-    with open("/home/gs/Desktop/CRS_GS_dev/RPI/data.bin", "rb") as fp:
-        data = fp.read()
-    return str(data)
-
+data = {}
 
 @app.get("/")
 def read_root():
-    return getJsonData()
+    return data
+
+@app.post("/json_update")
+async def receive_data(request: Request):
+    content_type = request.headers.get('Content-Type')
+    
+    if content_type is None:
+        raise HTTPException(status_code=400, detail='No Content-Type provided')
+    elif content_type == 'application/json':
+        try:
+            global data
+            data = await request.json()
+            url = "http://czechrockets.euweb.cz/set.php"
+            response = requests.post(url, json=data, headers={"X-Password": "air"})
+            return {"message": "Data received successfully!"}
+        except JSONDecodeError:
+            raise HTTPException(status_code=400, detail='Invalid JSON data')
+    else:
+        raise HTTPException(status_code=400, detail='Content-Type not supported')
+    
+    
