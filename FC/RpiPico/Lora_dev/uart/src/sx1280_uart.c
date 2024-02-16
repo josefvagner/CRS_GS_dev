@@ -32,29 +32,6 @@ void waitBusyPin()
 {
     while (gpio_get(BUSY_PIN) == 1)
     {
-        sleep_ms(100);
-    }
-}
-
-void initBuffer(uint8_t *buff, size_t len)
-{
-    buff = (uint8_t *)malloc(len);
-    if (buff == NULL)
-    {
-        // Handle memory allocation failure
-        perror("Failed to allocate memory");
-        exit(EXIT_FAILURE);
-    }
-}
-
-void resizeBuffer(uint8_t *buff, size_t newLen)
-{
-    buff = (uint8_t *)realloc(buff, newLen);
-    if (buff == NULL)
-    {
-        // Handle memory allocation failure
-        perror("Failed to allocate memory");
-        exit(EXIT_FAILURE);
     }
 }
 
@@ -86,10 +63,8 @@ void printBuffChar(uint8_t *buff, size_t len)
 
 void uartSend(uint8_t *buff, size_t len)
 {
-    // printf("Sending buffer: ");
-    // printBuffHex(buff, len);
-    uart_write_blocking(UART_ID, buff, len);
     waitBusyPin();
+    uart_write_blocking(UART_ID, buff, len);
 }
 
 void myMemcpy(void *dest, void *src, size_t len)
@@ -107,16 +82,9 @@ void uartSendRecv(uint8_t *msgBuff, size_t msgLen, uint8_t *recvBuff, size_t rec
     {
         char _ = uart_getc(UART_ID);
     }
-
+    waitBusyPin();
     uart_write_blocking(UART_ID, msgBuff, msgLen);
     uart_read_blocking(UART_ID, recvBuff, recvLen);
-    waitBusyPin();
-    /*
-    printf("Sending buffer: ");
-    printBuffHex(msgBuff, msgLen);
-    printf("Recieving buffer: ");
-    printBuffHex(recvBuff, recvLen);
-    */
 }
 
 uint8_t GetStatus()

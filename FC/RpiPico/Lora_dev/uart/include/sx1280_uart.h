@@ -298,6 +298,7 @@
 #define SET_PERF_COUNTER_MODE 0x9C
 
 void sx1280UartInit();
+void setBaudRate(uint baudRate);
 
 void initBuffer(uint8_t *buff, size_t len);
 void resizeBuffer(uint8_t *buff, size_t newLen);
