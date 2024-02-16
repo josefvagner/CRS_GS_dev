@@ -86,12 +86,13 @@ char *convert_to_json(GsMsg_t *data)
 
 int main()
 {
+    bool sendLocal = true;
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (sockfd < 0)
     {
+        sendLocal = false;
         perror("socket creation failed");
-        return 1;
     }
 
     // Connect to Python server
@@ -101,27 +102,25 @@ int main()
     server_addr.sin_addr.s_addr = inet_addr("0.0.0.0"); // Replace with Python server's IP
     if (connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
     {
+        sendLocal = false;
         perror("connection failed");
-        return 1;
     }
 
     printf("starting....RX\n");
     sx1280UartInit();
     printf("1\n");
     waitBusyPin();
-    printf("2\n");
     SetStandby(0x00);
-    printf("3\n");
+    printf("2\n");
     SetPacketType(0x01);
-    printf("4\n");
     uint8_t rfFreq[3] = {0xB8, 0x9D, 0x89};
     SetRfFrequency(rfFreq);
-    printf("5\n");
+    printf("3\n");
     SetBufferBaseAddress(TX_BASE_ADDR, RX_BASE_ADDR);
-    printf("6\n");
+    printf("4\n");
     uint8_t modParams[3] = {0x50, 0x0A, 0x01};
     SetModulationParams(modParams);
-    printf("7\n");
+    printf("5\n");
     uint8_t packetParams[7] = {
         DF_PREAMBLE_LENGTH,
         DF_HEADER_TYPE,
@@ -131,26 +130,15 @@ int main()
         0x00,
         0x00};
     SetPacketParams(packetParams);
-
+    printf("6\n");
     SetRxDutyCycle(0x03, 0, 0x00FA);
-
     SetDioIrqParams(0b0100000001100010, 0, 0, 0);
-    // SetDioIrqParams(0xFFFF, 0, 0, 0);
     SetRx(0x02, 0xFFFF);
 
     uint8_t pt = GetPacketType();
     printf("packet type %u\n", pt);
     ClrIrqStatus(0xFFFF);
 
-    /*
-    set_mode(pi, DIO1_PIN, PI_INPUT);
-    set_mode(pi, DIO2_PIN, PI_INPUT);
-    set_pull_up_down(pi, DIO1_PIN, PI_PUD_DOWN);
-    set_pull_up_down(pi, DIO2_PIN, PI_PUD_DOWN);
-
-    int dio1 = callback(pi, DIO1_PIN, RISING_EDGE, dio1Callback);
-    int dio2 = callback(pi, DIO2_PIN, RISING_EDGE, dio2Callback);
-    */
     uint8_t rxBuffStatus[2];
     uint8_t msgRaw[256];
     GsMsg_t msg;
@@ -180,20 +168,20 @@ int main()
                 myMemcpy(&msg, msgRaw, (size_t)rxBuffStatus[0]);
                 printf("New msg [%d] [%d]: fsw_state = %d\n", (int)rxBuffStatus[0], (int)rxBuffStatus[1], msg.fsw_state);
                 char *json_string = convert_to_json(&msg);
-                char request[strlen(json_string) + 150]; // Adjust buffer size as needed
-                sprintf(request, "POST /json_update HTTP/1.1\r\n"
-                                 "Host: 0.0.0.0:8000\r\n"
-                                 "Content-Type: application/json\r\n"
-                                 "Content-Length: %ld\r\n\r\n"
-                                 "%s",
-                        strlen(json_string), json_string);
-                // printf("%s\n", request);
-
-                int sent_bytes = send(sockfd, request, strlen(request), 0);
-                if (sent_bytes < 0)
+                if (sendLocal)
                 {
-                    perror("send failed");
-                    return 1;
+                    char request[strlen(json_string) + 150];
+                    sprintf(request, "POST /json_update HTTP/1.1\r\n"
+                                     "Host: 0.0.0.0:8000\r\n"
+                                     "Content-Type: application/json\r\n"
+                                     "Content-Length: %ld\r\n\r\n"
+                                     "%s",
+                            strlen(json_string), json_string);
+                    int sent_bytes = send(sockfd, request, strlen(request), 0);
+                    if (sent_bytes < 0)
+                    {
+                        perror("send failed");
+                    }
                 }
                 free(json_string);
             }

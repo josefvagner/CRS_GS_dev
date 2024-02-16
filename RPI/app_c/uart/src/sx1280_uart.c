@@ -67,7 +67,6 @@ void waitBusyPin()
 {
     while (gpio_read(pi, BUSY_PIN) == 1)
     {
-        usleep(2000);
     }
 }
 
@@ -126,16 +125,22 @@ void uartSend(uint8_t *buff, uint8_t len)
     // uart_write_blocking(UART_ID, buff, len);
 
     tcflush(uart, TCIOFLUSH);
+    waitBusyPin();
 
     if (uart != -1)
     {
-        int count = write(uart, buff, len); // Filestream, bytes to write, number of bytes to write
-        if (count < 0)
+        int count = 0;
+        while (count < len)
         {
-            printf("UART TX error\n");
+            int ret = write(uart, buff + count, len - count); // Filestream, bytes to write, number of bytes to write
+            if (ret < 0)
+            {
+                printf("UART TX error\n");
+                break;
+            }
+            count += ret;
         }
     }
-    waitBusyPin();
 }
 
 void myMemcpy(void *dest, void *src, size_t len)
@@ -159,30 +164,39 @@ void uartSendRecv(uint8_t *msgBuff, uint8_t msgLen, uint8_t *recvBuff, uint8_t r
     uart_read_blocking(UART_ID, recvBuff, recvLen);
     */
     tcflush(uart, TCIOFLUSH);
+    waitBusyPin();
 
     // printf("UartSendRecv: recvBuff = %d, recvLen = %d\n", recvBuff, recvLen);
 
     if (uart != -1)
     {
-        int count = write(uart, msgBuff, msgLen); // Filestream, bytes to write, number of bytes to write
-        if (count < 0)
+        int count = 0;
+        while (count < msgLen)
         {
-            printf("UART TX error\n");
+            int ret = write(uart, msgBuff + count, msgLen - count); // Filestream, bytes to write, number of bytes to write
+            if (ret < 0)
+            {
+                printf("UART TX error\n");
+                break;
+            }
+            count += ret;
         }
     }
     if (uart != -1)
     {
-        int rx_length = read(uart, recvBuff, recvLen);
-        if (rx_length < 0)
+        int count = 0;
+        while (count < recvLen)
         {
-            printf("Recv error\n");
-        }
-        else if (rx_length == 0)
-        {
-            printf("No recv data\n");
+            int ret = read(uart, recvBuff + count, recvLen - count); // Filestream, bytes to write, number of bytes to write
+            if (ret < 0)
+            {
+                printf("Recv error\n");
+                break;
+            }
+            count += ret;
         }
     }
-    waitBusyPin();
+
     /*
     printf("Sending buffer: ");
     printBuffHex(msgBuff, msgLen);
@@ -229,6 +243,7 @@ void WriteBuffer(uint8_t *data, size_t len)
 
 void ReadBuffer(uint8_t *recv, uint8_t len, uint8_t addr)
 {
+    /*
     uint8_t toRead = len;
     uint8_t currRead = 0;
     uint8_t readed = 0;
@@ -240,6 +255,9 @@ void ReadBuffer(uint8_t *recv, uint8_t len, uint8_t addr)
         toRead -= currRead;
         readed += currRead;
     }
+    */
+    uint8_t msg[3] = {READ_BUFFER, addr, len};
+    uartSendRecv(msg, 3, recv, len);
 }
 
 void SetSleep(uint8_t sleepConfig)
