@@ -12,6 +12,14 @@
 #define STOP_BITS 1
 #define PARITY UART_PARITY_EVEN
 
+#define RF_FREQ_1 0xB8
+#define RF_FREQ_2 0x9D
+#define RF_FREQ_3 0x89
+
+#define MOD_PARAM_1 0x70
+#define MOD_PARAM_2 0x0A
+#define MOD_PARAM_3 0x01
+
 // We are using pins 0 and 1, but see the GPIO function select table in the
 // datasheet for information on which other pins can be used.
 #define UART_TX_PIN 12
