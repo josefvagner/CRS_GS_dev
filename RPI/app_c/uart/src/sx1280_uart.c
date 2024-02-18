@@ -1,11 +1,82 @@
 #include "sx1280_uart.h"
 
+long long millis()
+{
+    struct timespec t;
+    clock_gettime(CLOCK_REALTIME, &t);
+    return t.tv_sec * 1e3 + (t.tv_nsec + 5e5) / 1e6;
+}
+
 void sx1280UartInit()
 {
     pi = pigpio_start(NULL, NULL);
     if (pi < 0)
+    {
+        perror("Can't connect to pigpiod (run sudo pigpiod)");
         exit(100);
+    }
 
+    if (get_mode(pi, RESET_PIN) != PI_OUTPUT)
+    {
+        set_mode(pi, RESET_PIN, PI_OUTPUT);
+    }
+
+    if (get_mode(pi, BUSY_PIN) != PI_INPUT)
+    {
+        set_mode(pi, BUSY_PIN, PI_INPUT);
+    }
+
+    if (get_mode(pi, UART_RTS_PIN) != PI_OUTPUT)
+    {
+        set_mode(pi, UART_RTS_PIN, PI_OUTPUT);
+    }
+
+    if (get_mode(pi, UART_RTS_PIN) != PI_ALT3)
+    {
+        set_mode(pi, UART_RTS_PIN, PI_ALT3);
+    }
+
+    if (get_mode(pi, UART_CTS_PIN) != PI_ALT3)
+    {
+        set_mode(pi, UART_CTS_PIN, PI_ALT3);
+    }
+
+    if (get_mode(pi, UART_RX_PIN) != PI_ALT0)
+    {
+        set_mode(pi, UART_RX_PIN, PI_ALT0);
+    }
+
+    if (get_mode(pi, UART_TX_PIN) != PI_ALT0)
+    {
+        set_mode(pi, UART_TX_PIN, PI_ALT0);
+    }
+
+    uart = open("/dev/serial0", O_RDWR | O_NOCTTY);
+    usleep(1000);
+    if (uart == -1)
+    {
+        printf("uart setup error");
+        exit(101);
+    }
+
+    struct termios options;
+    tcgetattr(uart, &options);
+    // cfsetispeed(&options, B115200);
+    // cfsetospeed(&options, B115200);
+    options.c_cflag = B115200 | CS8 | CLOCAL | CREAD | PARENB;
+    // options.c_cflag &= ~ICANON;
+    options.c_iflag = INPCK;
+    options.c_lflag = 0;
+    options.c_oflag = 0;
+    options.c_cc[VMIN] = 0;
+    options.c_cc[VTIME] = 10;
+    tcflush(uart, TCIOFLUSH);
+    tcsetattr(uart, TCSANOW, &options);
+}
+
+int resetSx1280()
+{
+    printf("Setting/Resseting sx1280\n");
     if (get_mode(pi, RESET_PIN) != PI_OUTPUT)
     {
         set_mode(pi, RESET_PIN, PI_OUTPUT);
@@ -31,65 +102,91 @@ void sx1280UartInit()
         set_mode(pi, UART_RTS_PIN, PI_ALT3);
     }
 
-    if (get_mode(pi, UART_CTS_PIN) != PI_ALT3)
+    if (SetStandby(0x00) == -1)
     {
-        set_mode(pi, UART_CTS_PIN, PI_ALT3);
+        return -1;
     }
 
-    if (get_mode(pi, UART_RX_PIN) != PI_ALT0)
+    if (SetPacketType(0x01) == -1)
     {
-        set_mode(pi, UART_RX_PIN, PI_ALT0);
+        return -1;
     }
 
-    if (get_mode(pi, UART_TX_PIN) != PI_ALT0)
+    uint8_t rfFreq[3] = {0xB8, 0x9D, 0x89};
+    if (SetRfFrequency(rfFreq) == -1)
     {
-        set_mode(pi, UART_TX_PIN, PI_ALT0);
+        return -1;
     }
 
-    uart = open("/dev/serial0", O_RDWR | O_NOCTTY);
-    if (uart == -1)
+    if (SetBufferBaseAddress(TX_BASE_ADDR, RX_BASE_ADDR) == -1)
     {
-        printf("uart error");
-        exit(101);
+        return -1;
     }
 
-    struct termios options;
-    tcgetattr(uart, &options);
-    options.c_cflag = B115200 | CS8 | CLOCAL | CREAD | PARENB; //<Set baud rate
-    options.c_iflag = INPCK;
-    options.c_oflag = 0;
-    options.c_lflag = 0;
-    tcflush(uart, TCIOFLUSH);
-    tcsetattr(uart, TCSANOW, &options);
+    uint8_t modParams[3] = {MOD_PARAM_1, MOD_PARAM_2, MOD_PARAM_3};
+    if (SetModulationParams(modParams) == -1)
+    {
+        return -1;
+    }
+
+    uint8_t packetParams[7] = {
+        DF_PREAMBLE_LENGTH,
+        DF_HEADER_TYPE,
+        (uint8_t)sizeof(GsMsg_t),
+        DF_CYCLICAL_REDUNDANCY_CHECK,
+        DF_CHIRP_INVERT,
+        0x00,
+        0x00};
+    if (SetPacketParams(packetParams) == -1)
+    {
+        return -1;
+    }
+
+    if (SetRxDutyCycle(0x03, 0, 0x00FA) == -1)
+    {
+        return -1;
+    }
+
+    if (SetDioIrqParams(0b0100000001100010, 0, 0, 0) == -1)
+    {
+        return -1;
+    }
+
+    uint8_t pt = 0;
+    if (GetPacketType(&pt) == -1 || pt != 1)
+    {
+        return -1;
+    }
+
+    if (ClrIrqStatus(0xFFFF) == -1)
+    {
+        return -1;
+    }
+    printf("Sx1280 reset/setup complete\n");
+
+    return 0;
 }
 
-void waitBusyPin()
+void waitForSetup()
 {
+    while (resetSx1280() == -1 || SetRx(0x02, 0xFFFF) == -1)
+    {
+        /* wait for setup */
+    }
+}
+
+int waitBusyPin()
+{
+    long long t0 = millis();
     while (gpio_read(pi, BUSY_PIN) == 1)
     {
+        if ((millis() - t0) >= 1000)
+        {
+            perror("waitBusyPin timeout");
+            return -1;
+        }
     }
-}
-
-void initBuffer(uint8_t *buff, size_t len)
-{
-    buff = (uint8_t *)malloc(len);
-    if (buff == NULL)
-    {
-        // Handle memory allocation failure
-        perror("Failed to allocate memory");
-        exit(EXIT_FAILURE);
-    }
-}
-
-void resizeBuffer(uint8_t *buff, size_t newLen)
-{
-    buff = (uint8_t *)realloc(buff, newLen);
-    if (buff == NULL)
-    {
-        // Handle memory allocation failure
-        perror("Failed to allocate memory");
-        exit(EXIT_FAILURE);
-    }
+    return 0;
 }
 
 void printBuffHex(uint8_t *buff, size_t len)
@@ -118,14 +215,15 @@ void printBuffChar(uint8_t *buff, size_t len)
     printf("%s\n", text);
 }
 
-void uartSend(uint8_t *buff, uint8_t len)
+int uartSend(uint8_t *buff, uint8_t len)
 {
-    // printf("Sending buffer: ");
-    // printBuffHex(buff, len);
-    // uart_write_blocking(UART_ID, buff, len);
-
     tcflush(uart, TCIOFLUSH);
-    waitBusyPin();
+    if (waitBusyPin() == -1)
+    {
+        return -1;
+    }
+
+    // printBuffHex(buff, len);
 
     if (uart != -1)
     {
@@ -133,14 +231,16 @@ void uartSend(uint8_t *buff, uint8_t len)
         while (count < len)
         {
             int ret = write(uart, buff + count, len - count); // Filestream, bytes to write, number of bytes to write
-            if (ret < 0)
+            // printf("write bytes = %d\n", ret);
+            if (ret <= 0)
             {
-                printf("UART TX error\n");
-                break;
+                perror("uartSend write error");
+                return -1;
             }
             count += ret;
         }
     }
+    return 0;
 }
 
 void myMemcpy(void *dest, void *src, size_t len)
@@ -152,21 +252,15 @@ void myMemcpy(void *dest, void *src, size_t len)
         cdest[i] = csrc[i];
 }
 
-void uartSendRecv(uint8_t *msgBuff, uint8_t msgLen, uint8_t *recvBuff, uint8_t recvLen)
+int uartSendRecv(uint8_t *msgBuff, uint8_t msgLen, uint8_t *recvBuff, uint8_t recvLen)
 {
-    /*
-    while (uart_is_readable(UART_ID))
+    tcflush(uart, TCIOFLUSH);
+    if (waitBusyPin() == -1)
     {
-        char _ = uart_getc(UART_ID);
+        return -1;
     }
 
-    uart_write_blocking(UART_ID, msgBuff, msgLen);
-    uart_read_blocking(UART_ID, recvBuff, recvLen);
-    */
-    tcflush(uart, TCIOFLUSH);
-    waitBusyPin();
-
-    // printf("UartSendRecv: recvBuff = %d, recvLen = %d\n", recvBuff, recvLen);
+    // printBuffHex(msgBuff, msgLen);
 
     if (uart != -1)
     {
@@ -174,10 +268,10 @@ void uartSendRecv(uint8_t *msgBuff, uint8_t msgLen, uint8_t *recvBuff, uint8_t r
         while (count < msgLen)
         {
             int ret = write(uart, msgBuff + count, msgLen - count); // Filestream, bytes to write, number of bytes to write
-            if (ret < 0)
+            if (ret <= 0)
             {
-                printf("UART TX error\n");
-                break;
+                perror("uartSendRecv write error");
+                return -1;
             }
             count += ret;
         }
@@ -187,34 +281,28 @@ void uartSendRecv(uint8_t *msgBuff, uint8_t msgLen, uint8_t *recvBuff, uint8_t r
         int count = 0;
         while (count < recvLen)
         {
+            // printf("read\n");
             int ret = read(uart, recvBuff + count, recvLen - count); // Filestream, bytes to write, number of bytes to write
-            if (ret < 0)
+            // printf("read ret = %d\n", ret);
+            if (ret <= 0)
             {
-                printf("Recv error\n");
-                break;
+                perror("uartSendRecv read error");
+                return -1;
             }
             count += ret;
         }
     }
-
-    /*
-    printf("Sending buffer: ");
-    printBuffHex(msgBuff, msgLen);
-    printf("Recieving buffer: ");
-    printBuffHex(recvBuff, recvLen);
-    */
+    return 0;
 }
 
-uint8_t GetStatus()
+int GetStatus(uint8_t *status)
 {
     uint8_t msg[1];
-    uint8_t recv[1];
     msg[0] = GET_STATUS;
-    uartSendRecv(msg, 1, recv, 1);
-    return recv[0];
+    return uartSendRecv(msg, 1, status, 1);
 }
 
-void WriteRegister(uint16_t addr, uint8_t *data, size_t len)
+int WriteRegister(uint16_t addr, uint8_t *data, size_t len)
 {
     uint8_t msg[len + 4];
     msg[0] = WRITE_REGISTER;
@@ -222,63 +310,50 @@ void WriteRegister(uint16_t addr, uint8_t *data, size_t len)
     msg[2] = (uint8_t)addr;
     msg[3] = (uint8_t)len;
     myMemcpy(msg + 4, data, len);
-    uartSend(msg, len + 4);
+    return uartSend(msg, len + 4);
 }
 
-void ReadRegister(uint8_t *recv, size_t len, uint16_t addr)
+int ReadRegister(uint8_t *recv, size_t len, uint16_t addr)
 {
     uint8_t msg[4] = {READ_REGISTER, (uint8_t)(addr >> 8), (uint8_t)addr, (uint8_t)len};
-    uartSendRecv(msg, 4, recv, len);
+    return uartSendRecv(msg, 4, recv, len);
 }
 
-void WriteBuffer(uint8_t *data, size_t len)
+int WriteBuffer(uint8_t *data, size_t len)
 {
     uint8_t msg[len + 3];
     msg[0] = WRITE_BUFFER;
     msg[1] = TX_BASE_ADDR;
     msg[2] = (uint8_t)len;
     myMemcpy(msg + 3, data, len);
-    uartSend(msg, len + 3);
+    return uartSend(msg, len + 3);
 }
 
-void ReadBuffer(uint8_t *recv, uint8_t len, uint8_t addr)
+int ReadBuffer(uint8_t *recv, uint8_t len, uint8_t addr)
 {
-    /*
-    uint8_t toRead = len;
-    uint8_t currRead = 0;
-    uint8_t readed = 0;
-    while (toRead > 0)
-    {
-        currRead = toRead > 8 ? 8 : toRead;
-        uint8_t msg[3] = {READ_BUFFER, addr + readed, currRead};
-        uartSendRecv(msg, 3, recv + readed, currRead);
-        toRead -= currRead;
-        readed += currRead;
-    }
-    */
     uint8_t msg[3] = {READ_BUFFER, addr, len};
-    uartSendRecv(msg, 3, recv, len);
+    return uartSendRecv(msg, 3, recv, len);
 }
 
-void SetSleep(uint8_t sleepConfig)
+int SetSleep(uint8_t sleepConfig)
 {
     uint8_t msg[2] = {SET_SLEEP, sleepConfig};
-    uartSend(msg, 2);
+    return uartSend(msg, 2);
 }
 
-void SetStandby(uint8_t standbyConfig)
+int SetStandby(uint8_t standbyConfig)
 {
     uint8_t msg[3] = {SET_STANDBY, 0x01, standbyConfig};
-    uartSend(msg, 3);
+    return uartSend(msg, 3);
 }
 
-void SetFs()
+int SetFs()
 {
     uint8_t msg[1] = {SET_FS};
-    uartSend(msg, 1);
+    return uartSend(msg, 1);
 }
 
-void SetTx(uint8_t periodBase, uint16_t periodBaseCount)
+int SetTx(uint8_t periodBase, uint16_t periodBaseCount)
 {
     uint8_t msg[5] = {
         SET_TX,
@@ -286,10 +361,10 @@ void SetTx(uint8_t periodBase, uint16_t periodBaseCount)
         periodBase,
         (uint8_t)(periodBaseCount >> 8),
         (uint8_t)periodBaseCount};
-    uartSend(msg, 5);
+    return uartSend(msg, 5);
 }
 
-void SetRx(uint8_t periodBase, uint16_t periodBaseCount)
+int SetRx(uint8_t periodBase, uint16_t periodBaseCount)
 {
     uint8_t msg[5] = {
         SET_RX,
@@ -297,10 +372,10 @@ void SetRx(uint8_t periodBase, uint16_t periodBaseCount)
         periodBase,
         (uint8_t)(periodBaseCount >> 8),
         (uint8_t)periodBaseCount};
-    uartSend(msg, 5);
+    return uartSend(msg, 5);
 }
 
-void SetRxDutyCycle(uint8_t periodBase, uint16_t rxPeriodBaseCount, uint16_t sleepPeriodBaseCount)
+int SetRxDutyCycle(uint8_t periodBase, uint16_t rxPeriodBaseCount, uint16_t sleepPeriodBaseCount)
 {
     uint8_t msg[7] = {
         SET_RX_DUTY_CYCLE,
@@ -310,126 +385,134 @@ void SetRxDutyCycle(uint8_t periodBase, uint16_t rxPeriodBaseCount, uint16_t sle
         (uint8_t)rxPeriodBaseCount,
         (uint8_t)(sleepPeriodBaseCount >> 8),
         (uint8_t)sleepPeriodBaseCount};
-    uartSend(msg, 7);
+    return uartSend(msg, 7);
 }
 
-void SetCad()
+int SetCad()
 {
     uint8_t msg[1] = {SET_CAD};
-    uartSend(msg, 1);
+    return uartSend(msg, 1);
 }
 
-void SetTxContinuousWave()
+int SetTxContinuousWave()
 {
     uint8_t msg[1] = {SET_TX_CONTINUOUS_WAVE};
-    uartSend(msg, 1);
+    return uartSend(msg, 1);
 }
 
-void SetTxContinuousPreamble()
+int SetTxContinuousPreamble()
 {
     uint8_t msg[1] = {SET_TX_CONTINUOUS_PREAMBLE};
-    uartSend(msg, 1);
+    return uartSend(msg, 1);
 }
 
-void SetPacketType(uint8_t packetType)
+int SetPacketType(uint8_t packetType)
 {
     uint8_t msg[3] = {SET_PACKET_TYPE, 0x01, packetType};
-    uartSend(msg, 3);
+    return uartSend(msg, 3);
 }
 
-uint8_t GetPacketType()
+int GetPacketType(uint8_t *packetType)
 {
     uint8_t msg[2] = {GET_PACKET_TYPE, 0x01};
-    uint8_t recv[1];
-    uartSendRecv(msg, 2, recv, 1);
-    return recv[0];
+    return uartSendRecv(msg, 2, packetType, 1);
 }
 
-void SetRfFrequency(uint8_t rfFrequency[3])
+int SetRfFrequency(uint8_t rfFrequency[3])
 {
     uint8_t msg[5];
     msg[0] = SET_RF_FREQUENCY;
     msg[1] = 0x03;
     myMemcpy(msg + 2, rfFrequency, 3);
-    uartSend(msg, 5);
+    return uartSend(msg, 5);
 }
 
-void SetTxParams(uint8_t power, uint8_t rampTime)
+int SetTxParams(uint8_t power, uint8_t rampTime)
 {
     uint8_t msg[4] = {SET_TX_PARAMS, 0x02, power, rampTime};
-    uartSend(msg, 4);
+    return uartSend(msg, 4);
 }
 
-void SetCadParams(uint8_t cadSymbolNum)
+int SetCadParams(uint8_t cadSymbolNum)
 {
     uint8_t msg[3] = {SET_CAD_PARAMS, 0x01, cadSymbolNum};
-    uartSend(msg, 3);
+    return uartSend(msg, 3);
 }
 
-void SetBufferBaseAddress(uint8_t txBaseAddress, uint8_t rxBaseAddress)
+int SetBufferBaseAddress(uint8_t txBaseAddress, uint8_t rxBaseAddress)
 {
     uint8_t msg[4] = {SET_BUFFER_BASE_ADDRESS, 0x02, txBaseAddress, rxBaseAddress};
-    uartSend(msg, 4);
+    return uartSend(msg, 4);
 }
 
-void SetModulationParams(uint8_t modParam[3])
+int SetModulationParams(uint8_t modParam[3])
 {
     uint8_t msg[5];
     msg[0] = SET_MODULATION_PARAMS;
     msg[1] = 0x03;
     myMemcpy(msg + 2, modParam, 3);
-    uartSend(msg, 5);
+    if (uartSend(msg, 5) == -1)
+    {
+        return -1;
+    }
 
     /* 0x1E Must be written to register 0x0925 for SF5 or SF6 */
     if (modParam[0] == 0x50 || modParam[0] == 0x60)
     {
         uint8_t msg[1] = {0x1E};
-        WriteRegister(0x0925, msg, 1);
+        if (WriteRegister(0x0925, msg, 1) == -1)
+        {
+            return -1;
+        }
     }
     /* 0x37 Must be written to register 0x0925 for SF7 or SF8 */
     else if (modParam[0] == 0x70 || modParam[0] == 0x80)
     {
         uint8_t msg[1] = {0x37};
-        WriteRegister(0x0925, msg, 1);
+        if (WriteRegister(0x0925, msg, 1) == -1)
+        {
+            return -1;
+        }
     }
     /* 0x32 Must be written to register 0x0925 for SF9, SF10, SF11, or SF12 */
     else if (modParam[0] == 0x90 || modParam[0] == 0xA0 || modParam[0] == 0xB0 || modParam[0] == 0xC0)
     {
         uint8_t msg[1] = {0x32};
-        WriteRegister(0x0925, msg, 1);
+        if (WriteRegister(0x0925, msg, 1) == -1)
+        {
+            return -1;
+        }
     }
 }
 
-void SetPacketParams(uint8_t packetParams[7])
+int SetPacketParams(uint8_t packetParams[7])
 {
     uint8_t msg[9];
     msg[0] = SET_PACKET_PARAMS;
     msg[1] = 0x07;
     myMemcpy(msg + 2, packetParams, 7);
-    uartSend(msg, 9);
+    return uartSend(msg, 9);
 }
 
-void GetRxBufferStatus(uint8_t recv[2])
+int GetRxBufferStatus(uint8_t recv[2])
 {
     uint8_t msg[2] = {GET_RX_BUFFER_STATUS, 0x02};
-    uartSendRecv(msg, 2, recv, 2);
+    return uartSendRecv(msg, 2, recv, 2);
 }
 
-void GetPacketStatus(uint8_t recv[5])
+int GetPacketStatus(uint8_t recv[5])
 {
     uint8_t msg[2] = {GET_PACKET_STATUS, 0x05};
-    uartSendRecv(msg, 2, recv, 5);
+    return uartSendRecv(msg, 2, recv, 5);
 }
 
-uint8_t GetRssiLnst()
+int GetRssiLnst(uint8_t *rssiLnst)
 {
     uint8_t msg[2] = {GET_RSSI_LNST, 0x01};
-    uint8_t recv[1];
-    uartSendRecv(msg, 2, recv, 1);
-    return recv[0];
+    uartSendRecv(msg, 2, rssiLnst, 1);
 }
 
-void SetDioIrqParams(uint16_t irqMask, uint16_t dio1Mask, uint16_t dio2Mask, uint16_t dio3Mask)
+int SetDioIrqParams(uint16_t irqMask, uint16_t dio1Mask, uint16_t dio2Mask, uint16_t dio3Mask)
 {
     uint8_t msg[10] = {
         SET_DIO_IRQ_PARAMS,
@@ -442,82 +525,82 @@ void SetDioIrqParams(uint16_t irqMask, uint16_t dio1Mask, uint16_t dio2Mask, uin
         (uint8_t)dio2Mask,
         (uint8_t)(dio3Mask >> 8),
         (uint8_t)dio3Mask};
-    uartSend(msg, 10);
+    return uartSend(msg, 10);
 }
 
-uint16_t GetIrqStatus()
+int GetIrqStatus(uint16_t *irq)
 {
     uint8_t msg[2] = {GET_IRQ_STATUS, 0x02};
-    uint8_t recv[2];
-    uartSendRecv(msg, 2, recv, 2);
-    uint16_t irq = ((uint16_t)recv[0] << 8) | recv[1];
-    return irq;
+    uint8_t recv[2] = {0};
+    int ret = uartSendRecv(msg, 2, recv, 2);
+    *irq = ((uint16_t)recv[0] << 8) | recv[1];
+    return ret;
 }
 
-void ClrIrqStatus(uint16_t irqMask)
+int ClrIrqStatus(uint16_t irqMask)
 {
     uint8_t msg[4] = {
         CLR_IRQ_STATUS,
         0x02,
         (uint8_t)(irqMask >> 8),
         (uint8_t)(irqMask)};
-    uartSend(msg, 4);
+    return uartSend(msg, 4);
 }
 
-void SetRegulatorMode(uint8_t regulatorMode)
+int SetRegulatorMode(uint8_t regulatorMode)
 {
     uint8_t msg[3] = {SET_REGULATOR_MODE, 0x01, regulatorMode};
-    uartSend(msg, 3);
+    return uartSend(msg, 3);
 }
 
-void SetSaveContext()
+int SetSaveContext()
 {
     uint8_t msg[1] = {SET_SAVE_CONTEXT};
-    uartSend(msg, 1);
+    return uartSend(msg, 1);
 }
 
-void SetAutoFS(uint8_t state)
+int SetAutoFS(uint8_t state)
 {
     uint8_t msg[3] = {SET_AUTO_FS, 0x01, state};
-    uartSend(msg, 3);
+    return uartSend(msg, 3);
 }
 
-void SetAutoTx(uint8_t time)
+int SetAutoTx(uint8_t time)
 {
     uint8_t msg[4] = {
         SET_AUTO_TX,
         0x02,
         (uint8_t)(time >> 8),
         (uint8_t)time};
-    uartSend(msg, 4);
+    return uartSend(msg, 4);
 }
 
-void SetPerfCounterMode(uint8_t perfCounterMode)
+int SetPerfCounterMode(uint8_t perfCounterMode)
 {
     uint8_t msg[3] = {SET_PERF_COUNTER_MODE, 0x01, perfCounterMode};
-    uartSend(msg, 3);
+    return uartSend(msg, 3);
 }
 
-void SetLongPreamble(uint8_t enable)
+int SetLongPreamble(uint8_t enable)
 {
     uint8_t msg[3] = {SET_LONG_PREAMBLE, 0x01, enable};
-    uartSend(msg, 3);
+    return uartSend(msg, 3);
 }
 
-void SetUartSpeed(uint8_t uartSpeed)
+int SetUartSpeed(uint8_t uartSpeed)
 {
     uint8_t msg[3] = {SET_UART_SPEED, 0x01, uartSpeed};
-    uartSend(msg, 3);
+    return uartSend(msg, 3);
 }
 
-void SetRangingRole(uint8_t mode)
+int SetRangingRole(uint8_t mode)
 {
     uint8_t msg[3] = {SET_RANGING_ROLE, 0x01, mode};
-    uartSend(msg, 3);
+    return uartSend(msg, 3);
 }
 
-void SetAdvancedRanging(uint8_t state)
+int SetAdvancedRanging(uint8_t state)
 {
     uint8_t msg[3] = {SET_ADVANCED_RANGING, 0x01, state};
-    uartSend(msg, 3);
+    return uartSend(msg, 3);
 }

@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <termios.h>
+#include <time.h>
 
 // We are using pins 0 and 1, but see the GPIO function select table in the
 // datasheet for information on which other pins can be used.
@@ -18,6 +19,14 @@
 
 #define BUSY_PIN 5
 #define RESET_PIN 10
+
+#define RF_FREQ_1 0xB8
+#define RF_FREQ_2 0x9D
+#define RF_FREQ_3 0x89
+
+#define MOD_PARAM_1 0x70
+#define MOD_PARAM_2 0x0A
+#define MOD_PARAM_3 0x01
 
 #define DIO1_PIN 6
 #define DIO2_PIN 26
@@ -32,6 +41,31 @@
 #define DF_HEADER_TYPE 0x00
 #define DF_CYCLICAL_REDUNDANCY_CHECK 0x20
 #define DF_CHIRP_INVERT 0x40
+
+typedef struct
+{
+    float velocity;
+    float rel_alti;
+    float in_timestamp;
+    float out_timestamp;
+    float bmp_pres;
+    float bmp_temp;
+    float ina_curr;
+    float ina_volt;
+    float mpu_mag_x;
+    float mpu_mag_y;
+    float mpu_mag_z;
+    float mpu_accel_x;
+    float mpu_accel_y;
+    float mpu_accel_z;
+    float mpu_gyro_x;
+    float mpu_gyro_y;
+    float mpu_gyro_z;
+    uint8_t fsw_state;
+    uint8_t payload_released;
+    uint8_t drogue_released;
+    uint8_t parachute_released;
+} GsMsg_t;
 
 /* ------------ Defining SD Card Command Index with Hexadecimel Commands ------------ */
 
@@ -301,56 +335,60 @@
 static int pi = -1;
 static int uart = -1;
 
+long long millis();
+
 void sx1280UartInit();
 
-void initBuffer(uint8_t *buff, size_t len);
-void resizeBuffer(uint8_t *buff, size_t newLen);
+int resetSx1280();
+
+void waitForSetup();
+
 void myMemcpy(void *dest, void *src, size_t len);
 
-void uartSend(uint8_t *buff, uint8_t len);
-void uartSendRecv(uint8_t *msgBuff, uint8_t msgLen, uint8_t *recvBuff, uint8_t recvLen);
-void waitBusyPin();
+int uartSend(uint8_t *buff, uint8_t len);
+int uartSendRecv(uint8_t *msgBuff, uint8_t msgLen, uint8_t *recvBuff, uint8_t recvLen);
+int waitBusyPin();
 
 void printBuffHex(uint8_t *buff, size_t len);
 void printBuffDec(uint8_t *buff, size_t len);
 void printBuffChar(uint8_t *buff, size_t len);
 
-uint8_t GetStatus();
-void WriteRegister(uint16_t addr, uint8_t *data, size_t len);
-void ReadRegister(uint8_t *recv, size_t len, uint16_t addr);
-void WriteBuffer(uint8_t *data, size_t len);
-void ReadBuffer(uint8_t *recv, uint8_t len, uint8_t addr);
-void SetSleep(uint8_t sleepConfig);
-void SetStandby(uint8_t standbyConfig);
-void SetFs();
-void SetTx(uint8_t periodBase, uint16_t periodBaseCount);
-void SetRx(uint8_t periodBase, uint16_t periodBaseCount);
-void SetRxDutyCycle(uint8_t periodBase, uint16_t rxPeriodBaseCount, uint16_t sleepPeriodBaseCount);
-void SetCad();
-void SetTxContinuousWave();
-void SetTxContinuousPreamble();
-void SetPacketType(uint8_t packetType);
-uint8_t GetPacketType();
-void SetRfFrequency(uint8_t rfFrequency[3]);
-void SetTxParams(uint8_t power, uint8_t rampTime);
-void SetCadParams(uint8_t cadSymbolNum);
-void SetBufferBaseAddress(uint8_t txBaseAddress, uint8_t rxBaseAddress);
-void SetModulationParams(uint8_t modParam[3]);
-void SetPacketParams(uint8_t packetParams[7]);
-void GetRxBufferStatus(uint8_t recv[2]);
-void GetPacketStatus(uint8_t recv[5]);
-uint8_t GetRssiLnst();
-void SetDioIrqParams(uint16_t irqMask, uint16_t dio1Mask, uint16_t dio2Mask, uint16_t dio3Mask);
-uint16_t GetIrqStatus();
-void ClrIrqStatus(uint16_t irqMask);
-void SetRegulatorMode(uint8_t regulatorMode);
-void SetSaveContext();
-void SetAutoFS(uint8_t state);
-void SetAutoTx(uint8_t time);
-void SetPerfCounterMode(uint8_t perfCounterMode);
-void SetLongPreamble(uint8_t enable);
-void SetUartSpeed(uint8_t uartSpeed);
-void SetRangingRole(uint8_t mode);
-void SetAdvancedRanging(uint8_t state);
+int GetStatus(uint8_t *status);
+int WriteRegister(uint16_t addr, uint8_t *data, size_t len);
+int ReadRegister(uint8_t *recv, size_t len, uint16_t addr);
+int WriteBuffer(uint8_t *data, size_t len);
+int ReadBuffer(uint8_t *recv, uint8_t len, uint8_t addr);
+int SetSleep(uint8_t sleepConfig);
+int SetStandby(uint8_t standbyConfig);
+int SetFs();
+int SetTx(uint8_t periodBase, uint16_t periodBaseCount);
+int SetRx(uint8_t periodBase, uint16_t periodBaseCount);
+int SetRxDutyCycle(uint8_t periodBase, uint16_t rxPeriodBaseCount, uint16_t sleepPeriodBaseCount);
+int SetCad();
+int SetTxContinuousWave();
+int SetTxContinuousPreamble();
+int SetPacketType(uint8_t packetType);
+int GetPacketType(uint8_t *packetType);
+int SetRfFrequency(uint8_t rfFrequency[3]);
+int SetTxParams(uint8_t power, uint8_t rampTime);
+int SetCadParams(uint8_t cadSymbolNum);
+int SetBufferBaseAddress(uint8_t txBaseAddress, uint8_t rxBaseAddress);
+int SetModulationParams(uint8_t modParam[3]);
+int SetPacketParams(uint8_t packetParams[7]);
+int GetRxBufferStatus(uint8_t recv[2]);
+int GetPacketStatus(uint8_t recv[5]);
+int GetRssiLnst(uint8_t *rssiLnst);
+int SetDioIrqParams(uint16_t irqMask, uint16_t dio1Mask, uint16_t dio2Mask, uint16_t dio3Mask);
+int GetIrqStatus(uint16_t *irg);
+int ClrIrqStatus(uint16_t irqMask);
+int SetRegulatorMode(uint8_t regulatorMode);
+int SetSaveContext();
+int SetAutoFS(uint8_t state);
+int SetAutoTx(uint8_t time);
+int SetPerfCounterMode(uint8_t perfCounterMode);
+int SetLongPreamble(uint8_t enable);
+int SetUartSpeed(uint8_t uartSpeed);
+int SetRangingRole(uint8_t mode);
+int SetAdvancedRanging(uint8_t state);
 
 #endif /* SX1280_UART_H */

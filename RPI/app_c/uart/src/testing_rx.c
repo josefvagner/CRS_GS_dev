@@ -3,17 +3,7 @@
 #include "sx1280_uart.h"
 #include "cJSON.h"
 #include <string.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
-#define SERVER_IP "0.0.0.0"
-#define SERVER_PORT 8000
-#define ENDPOINT "/json_update"
-
-int sockfd;
-struct sockaddr_in server_addr;
-bool sendLocal = true;
+#include <time.h>
 
 char *convert_to_json(GsMsg_t *data)
 {
@@ -45,42 +35,25 @@ char *convert_to_json(GsMsg_t *data)
     return json_string;
 }
 
-void connectApi()
-{
-    printf("Connecting to FastApi\n");
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-
-    if (sockfd < 0)
-    {
-        sendLocal = false;
-        perror("socket creation failed");
-    }
-    struct sockaddr_in server_addr;
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(8000);                 // Adjust port number as needed
-    server_addr.sin_addr.s_addr = inet_addr("0.0.0.0"); // Replace with Python server's IP
-    if (connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
-    {
-        sendLocal = false;
-        perror("connection failed");
-    }
-}
-
 int main()
 {
     printf("starting....RX\n");
-    connectApi();
     sx1280UartInit();
     waitForSetup();
+    SetRx(0x02, 0xFFFF);
 
     uint8_t rxBuffStatus[2];
     uint8_t msgRaw[256];
     GsMsg_t msg;
+
+    int lastFswState = -1;
+    long missedPackets = 0;
+    long allPackets = 0;
+    time_t tStart = time(NULL);
     uint16_t irq = 0;
 
-    while (true)
+    while ((time(NULL) - tStart) <= 10)
     {
-        irq = 0;
         if (GetIrqStatus(&irq) == -1)
         {
             waitForSetup();
@@ -88,16 +61,20 @@ int main()
 
         if (irq & 0x02)
         {
+            allPackets += 1;
             if (irq & 0b1000000)
             {
+                missedPackets += 1;
                 printf("Crc error...\n");
             }
             else if (irq & 0b100000)
             {
+                missedPackets += 1;
                 printf("Header error...\n");
             }
             else if (irq & 0b100000000000000)
             {
+                missedPackets += 1;
                 printf("Timeout...\n");
             }
             else
@@ -112,25 +89,8 @@ int main()
                 }
                 myMemcpy(&msg, msgRaw, (size_t)rxBuffStatus[0]);
                 printf("New msg [%d] [%d]: fsw_state = %d\n", (int)rxBuffStatus[0], (int)rxBuffStatus[1], msg.fsw_state);
-                char *json_string = convert_to_json(&msg);
-                if (sendLocal)
-                {
-                    char request[strlen(json_string) + 150];
-                    sprintf(request, "POST /json_update HTTP/1.1\r\n"
-                                     "Host: 0.0.0.0:8000\r\n"
-                                     "Content-Type: application/json\r\n"
-                                     "Content-Length: %ld\r\n\r\n"
-                                     "%s",
-                            strlen(json_string), json_string);
-                    int sent_bytes = send(sockfd, request, strlen(request), 0);
-                    if (sent_bytes < 0)
-                    {
-                        perror("send failed");
-                        close(sockfd);
-                        connectApi();
-                    }
-                }
-                free(json_string);
+                // char *json_string = convert_to_json(&msg);
+                // free(json_string);
             }
             if (ClrIrqStatus(0xFFFF) == -1)
             {
@@ -138,5 +98,7 @@ int main()
             }
         }
     }
+    printf("All recieved packets = %d, Missed packets = %d, Packet lost = %.2f %, Freq = %.2f Hz\n", allPackets, missedPackets, ((float)missedPackets / (float)allPackets), (float)(allPackets / 10.0));
+
     return 0;
 }

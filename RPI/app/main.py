@@ -3,6 +3,8 @@ from json import JSONDecodeError
 import requests
 from time import time_ns
 from fastapi.middleware.cors import CORSMiddleware
+import logging
+from datetime import datetime
 
 app = FastAPI()
 app.add_middleware(
@@ -16,7 +18,9 @@ app.add_middleware(
 data = {}
 taskRunnig = False
 url = "http://czechrockets.euweb.cz/set.php"
-t0 = 0
+dd = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
+logging.basicConfig(level=logging.INFO, format="%(message)s", filename="fastApi.json",filemode="a")
 
 def dbUpdate():
     global taskRunnig, data, url
@@ -27,6 +31,9 @@ def dbUpdate():
     except:
         print("dbUpdate: error")
     taskRunnig = False
+
+def logData():
+    logging.info(str(data) + ",")
 
 @app.get("/")
 def read_root():
@@ -42,6 +49,7 @@ async def receive_data(request: Request, bg: BackgroundTasks):
     elif content_type == 'application/json':
         try:
             data = await request.json()
+            logData()
         except JSONDecodeError:
             raise HTTPException(status_code=400, detail='Invalid JSON data')
     else:
@@ -50,8 +58,6 @@ async def receive_data(request: Request, bg: BackgroundTasks):
     if not taskRunnig:
         bg.add_task(dbUpdate)
         taskRunnig = True
-    print("elapsed time = " + str((time_ns()-t0)/1e6))
-    t0 = time_ns()
     return {"message": "Data received successfully!"}
     
     
