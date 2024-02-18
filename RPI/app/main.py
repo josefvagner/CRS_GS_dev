@@ -37,6 +37,7 @@ def logData():
 
 @app.get("/")
 def read_root():
+    data["time"] = datetime.now().strftime("%H:%M:%S")
     return data
 
 @app.post("/json_update")
@@ -49,6 +50,7 @@ async def receive_data(request: Request, bg: BackgroundTasks):
     elif content_type == 'application/json':
         try:
             data = await request.json()
+            data["time"] = datetime.now().strftime("%H:%M:%S")
             logData()
         except JSONDecodeError:
             raise HTTPException(status_code=400, detail='Invalid JSON data')

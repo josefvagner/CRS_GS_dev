@@ -11,10 +11,6 @@
 #define SERVER_PORT 8000
 #define ENDPOINT "/json_update"
 
-int sockfd;
-struct sockaddr_in server_addr;
-bool sendLocal = true;
-
 char *convert_to_json(GsMsg_t *data)
 {
     cJSON *root = cJSON_CreateObject();
@@ -23,6 +19,7 @@ char *convert_to_json(GsMsg_t *data)
     cJSON_AddNumberToObject(root, "in_timestamp", data->in_timestamp);
     cJSON_AddNumberToObject(root, "out_timestamp", data->out_timestamp);
     cJSON_AddNumberToObject(root, "bmp_pres", data->bmp_pres);
+    cJSON_AddNumberToObject(root, "bmp_temp", data->bmp_temp);
     cJSON_AddNumberToObject(root, "ina_Curr", data->ina_curr);
     cJSON_AddNumberToObject(root, "ina_Voltage", data->ina_volt);
     cJSON_AddNumberToObject(root, "mpu_mag_x", data->mpu_mag_x);
@@ -45,14 +42,13 @@ char *convert_to_json(GsMsg_t *data)
     return json_string;
 }
 
-void connectApi()
+void sendToApi(const char *json)
 {
-    printf("Connecting to FastApi\n");
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    // printf("Connecting to FastApi\n");
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (sockfd < 0)
     {
-        sendLocal = false;
         perror("socket creation failed");
     }
     struct sockaddr_in server_addr;
@@ -61,15 +57,29 @@ void connectApi()
     server_addr.sin_addr.s_addr = inet_addr("0.0.0.0"); // Replace with Python server's IP
     if (connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
     {
-        sendLocal = false;
         perror("connection failed");
+        close(sockfd);
     }
+
+    char request[strlen(json) + 150];
+    sprintf(request, "POST /json_update HTTP/1.1\r\n"
+                     "Host: 0.0.0.0:8000\r\n"
+                     "Content-Type: application/json\r\n"
+                     "Content-Length: %ld\r\n\r\n"
+                     "%s",
+            strlen(json), json);
+    int sent_bytes = send(sockfd, request, strlen(request), 0);
+    if (sent_bytes < 0)
+    {
+        perror("send failed");
+        close(sockfd);
+    }
+    close(sockfd);
 }
 
 int main()
 {
     printf("starting....RX\n");
-    connectApi();
     sx1280UartInit();
     waitForSetup();
 
@@ -113,23 +123,7 @@ int main()
                 myMemcpy(&msg, msgRaw, (size_t)rxBuffStatus[0]);
                 printf("New msg [%d] [%d]: fsw_state = %d\n", (int)rxBuffStatus[0], (int)rxBuffStatus[1], msg.fsw_state);
                 char *json_string = convert_to_json(&msg);
-                if (sendLocal)
-                {
-                    char request[strlen(json_string) + 150];
-                    sprintf(request, "POST /json_update HTTP/1.1\r\n"
-                                     "Host: 0.0.0.0:8000\r\n"
-                                     "Content-Type: application/json\r\n"
-                                     "Content-Length: %ld\r\n\r\n"
-                                     "%s",
-                            strlen(json_string), json_string);
-                    int sent_bytes = send(sockfd, request, strlen(request), 0);
-                    if (sent_bytes < 0)
-                    {
-                        perror("send failed");
-                        close(sockfd);
-                        connectApi();
-                    }
-                }
+                sendToApi(json_string);
                 free(json_string);
             }
             if (ClrIrqStatus(0xFFFF) == -1)
