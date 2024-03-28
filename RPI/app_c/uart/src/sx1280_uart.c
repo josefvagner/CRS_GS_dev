@@ -171,7 +171,7 @@ void waitForSetup()
 {
     while (resetSx1280() == -1 || SetRx(0x02, 0xFFFF) == -1)
     {
-        /* wait for setup */
+        perror("setup error");
     }
 }
 
