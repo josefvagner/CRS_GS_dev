@@ -187,19 +187,10 @@ int main()
         rslt = bmp3_get_status(&bmpStatus, &bmp388);
         bmp3_check_rslt("bmp3_get_status", rslt);
 
-        /* Read temperature and pressure data iteratively based on data ready interrupt */
         if ((rslt == BMP3_OK) && (bmpStatus.intr.drdy == BMP3_ENABLE))
         {
-            /*
-             * First parameter indicates the type of data to be read
-             * BMP3_PRESS_TEMP : To read pressure and temperature data
-             * BMP3_TEMP       : To read only temperature data
-             * BMP3_PRESS      : To read only pressure data
-             */
             rslt = bmp3_get_sensor_data(BMP3_PRESS_TEMP, &bmpData, &bmp388);
             bmp3_check_rslt("bmp3_get_sensor_data", rslt);
-
-            /* NOTE : Read status register again to clear data ready interrupt status */
             rslt = bmp3_get_status(&bmpStatus, &bmp388);
             bmp3_check_rslt("bmp3_get_status", rslt);
         }

@@ -36,8 +36,8 @@ int main()
     stdio_init_all();
     sleep_ms(1000);
     printf("starting....\n");
-    // sx1280_spi_t dev = {spi0, 19, 16, 18, 17, 2, 1};
-    sx1280_spi_t dev = {spi0, 19, 16, 18, 17, 7, 6};
+    sx1280_spi_t dev = {spi0, 19, 16, 18, 17, 2, 1};
+    // sx1280_spi_t dev = {spi0, 19, 16, 18, 17, 7, 6};
     sx1280SPIInit(&dev);
     SetStandby(&dev, 0x00);
     SetPacketType(&dev, 0x01);
@@ -91,6 +91,7 @@ int main()
             }
         }
         ClrIrqStatus(&dev, 0xFFFF);
+        sleep_ms(200);
     }
     printf("end\n");
 }

@@ -18,6 +18,7 @@ target_link_libraries(${NAME}
         hardware_i2c)
 
 pico_enable_stdio_usb(${NAME} 1)
+pico_enable_stdio_uart(${NAME} 0)
 
 
 # create map/bin/hex file etc.
