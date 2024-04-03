@@ -58,6 +58,18 @@ void sx1280SPIInit(sx1280_spi_t *dev)
         printf("spi setup error");
         exit(101);
     }
+
+    /*
+    uint8_t buff[3] = {0x01, 0x02, 0x03};
+    while (true)
+    {
+        printf("sending to spi\n");
+        gpio_write(pi, dev->csPin, 0);
+        int ret = spi_write(pi, dev->spi, buff, 3);
+        gpio_write(pi, dev->csPin, 1);
+        usleep(1000);
+    }
+    */
 }
 
 int resetSx1280(sx1280_spi_t *dev)
@@ -264,8 +276,8 @@ int spiSendRecv(sx1280_spi_t *dev, uint8_t *msgBuff, size_t msgLen, uint8_t *rec
         gpio_write(pi, dev->csPin, 0);
         int ret = spi_xfer(pi, dev->spi, send, recv, len);
         gpio_write(pi, dev->csPin, 1);
-        printBuffHex(send, len);
-        printBuffHex(recv, len);
+        // printBuffHex(send, len);
+        // printBuffHex(recv, len);
         if (ret != len)
         {
             perror("spiSendRecv write error");

@@ -54,7 +54,7 @@ int main()
     long missedPackets = 0;
     long allPackets = 0;
     time_t tStart = time(NULL);
-    uint16_t irq = 0;
+    uint16_t irq = 1;
 
     while ((time(NULL) - tStart) <= 10)
     {
@@ -101,6 +101,7 @@ int main()
                 waitForSetup(&dev);
             }
         }
+        usleep(1000);
     }
     printf("All recieved packets = %d, Missed packets = %d, Packet lost = %.2f %, Freq = %.2f Hz\n", allPackets, missedPackets, ((float)missedPackets / (float)allPackets), (float)(allPackets / 10.0));
 
