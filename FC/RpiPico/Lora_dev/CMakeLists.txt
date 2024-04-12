@@ -15,7 +15,7 @@ endif()
 pico_sdk_init()
 
 add_subdirectory(spi)
-add_subdirectory(spd)
+#add_subdirectory(spd)
 #add_subdirectory(uart)
 add_subdirectory(Sensor_board)
 

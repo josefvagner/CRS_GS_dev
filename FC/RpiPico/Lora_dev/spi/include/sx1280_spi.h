@@ -24,6 +24,13 @@
 #define DF_CYCLICAL_REDUNDANCY_CHECK 0x20
 #define DF_CHIRP_INVERT 0x40
 
+#define IRQ 0b0100000001100011
+#define DIO1 0b0000000000000001
+#define DIO2 0b0000000000000010
+#define DIO3 0b0100000001100000
+
+#define BUSY_TIMEOUT_MS 1000
+
 /* ------------ Defining SD Card Command Index with Hexadecimel Commands ------------ */
 
 /*  Retrieve the transceiver status
@@ -289,6 +296,17 @@
 
 #define SET_PERF_COUNTER_MODE 0x9C
 
+enum LORA_STATE
+{
+    SLEEP,
+    STANDBY_RC,
+    STANDBY_XOSC,
+    FS,
+    TX,
+    RX,
+    CAD
+};
+
 typedef struct sx1280_spi_t
 {
     spi_inst_t *spi;
@@ -298,56 +316,94 @@ typedef struct sx1280_spi_t
     uint csPin;
     uint busyPin;
     uint resetPin;
+    uint dio1Pin;
+    uint dio2Pin;
+    uint dio3Pin;
+    uint state;
 } sx1280_spi_t;
 
-void sx1280SPIInit(sx1280_spi_t *dev);
+typedef struct
+{
+    float velocity;
+    float rel_alti;
+    float in_timestamp;
+    float out_timestamp;
+    float bmp_pres;
+    float bmp_temp;
+    float ina_curr;
+    float ina_volt;
+    float mpu_mag_x;
+    float mpu_mag_y;
+    float mpu_mag_z;
+    float mpu_accel_x;
+    float mpu_accel_y;
+    float mpu_accel_z;
+    float mpu_gyro_x;
+    float mpu_gyro_y;
+    float mpu_gyro_z;
+    uint8_t fsw_state;
+    uint8_t payload_released;
+    uint8_t drogue_released;
+    uint8_t parachute_released;
+} GsMsg_t;
 
-void myMemcpy(void *dest, void *src, size_t len);
+typedef struct
+{
+    uint8_t idx;
+} GsPingMsg_t;
 
-void spiSend(sx1280_spi_t *dev, uint8_t *buff, size_t len);
-void spiSendRecv(sx1280_spi_t *dev, uint8_t *msgBuff, size_t msgLen, uint8_t *recvBuff, size_t recvLen);
-void waitBusyPin(sx1280_spi_t *dev);
+uint32_t millis();
 
-void printBuffHex(uint8_t *buff, size_t len);
-void printBuffDec(uint8_t *buff, size_t len);
-void printBuffChar(uint8_t *buff, size_t len);
+void Sx1280SPIInit(sx1280_spi_t *dev);
+int ResetSx1280(sx1280_spi_t *dev);
+void WaitForSetup(sx1280_spi_t *dev);
 
-uint8_t GetStatus(sx1280_spi_t *dev);
-void WriteRegister(sx1280_spi_t *dev, uint16_t addr, uint8_t *data, size_t len);
-void ReadRegister(sx1280_spi_t *dev, uint8_t *recv, size_t len, uint16_t addr);
-void WriteBuffer(sx1280_spi_t *dev, uint8_t *data, size_t len);
-void ReadBuffer(sx1280_spi_t *dev, uint8_t *recv, size_t len, uint8_t addr);
-void SetSleep(sx1280_spi_t *dev, uint8_t sleepConfig);
-void SetStandby(sx1280_spi_t *dev, uint8_t standbyConfig);
-void SetFs(sx1280_spi_t *dev);
-void SetTx(sx1280_spi_t *dev, uint8_t periodBase, uint16_t periodBaseCount);
-void SetRx(sx1280_spi_t *dev, uint8_t periodBase, uint16_t periodBaseCount);
-void SetRxDutyCycle(sx1280_spi_t *dev, uint8_t periodBase, uint16_t rxPeriodBaseCount, uint16_t sleepPeriodBaseCount);
-void SetCad(sx1280_spi_t *dev);
-void SetTxContinuousWave(sx1280_spi_t *dev);
-void SetTxContinuousPreamble(sx1280_spi_t *dev);
-void SetPacketType(sx1280_spi_t *dev, uint8_t packetType);
-uint8_t GetPacketType(sx1280_spi_t *dev);
-void SetRfFrequency(sx1280_spi_t *dev, uint8_t rfFrequency[3]);
-void SetTxParams(sx1280_spi_t *dev, uint8_t power, uint8_t rampTime);
-void SetCadParams(sx1280_spi_t *dev, uint8_t cadSymbolNum);
-void SetBufferBaseAddress(sx1280_spi_t *dev, uint8_t txBaseAddress, uint8_t rxBaseAddress);
-void SetModulationParams(sx1280_spi_t *dev, uint8_t modParam[3]);
-void SetPacketParams(sx1280_spi_t *dev, uint8_t packetParams[7]);
-void GetRxBufferStatus(sx1280_spi_t *dev, uint8_t recv[2]);
-void GetPacketStatus(sx1280_spi_t *dev, uint8_t recv[5]);
-uint8_t GetRssiLnst(sx1280_spi_t *dev);
-void SetDioIrqParams(sx1280_spi_t *dev, uint16_t irqMask, uint16_t dio1Mask, uint16_t dio2Mask, uint16_t dio3Mask);
-uint16_t GetIrqStatus(sx1280_spi_t *dev);
-void ClrIrqStatus(sx1280_spi_t *dev, uint16_t irqMask);
-void SetRegulatorMode(sx1280_spi_t *dev, uint8_t regulatorMode);
-void SetSaveContext(sx1280_spi_t *dev);
-void SetAutoFS(sx1280_spi_t *dev, uint8_t state);
-void SetAutoTx(sx1280_spi_t *dev, uint8_t time);
-void SetPerfCounterMode(sx1280_spi_t *dev, uint8_t perfCounterMode);
-void SetLongPreamble(sx1280_spi_t *dev, uint8_t enable);
-void SetUartSpeed(sx1280_spi_t *dev, uint8_t uartSpeed);
-void SetRangingRole(sx1280_spi_t *dev, uint8_t mode);
-void SetAdvancedRanging(sx1280_spi_t *dev, uint8_t state);
+void MyMemcpy(void *dest, void *src, size_t len);
+
+int SpiSend(sx1280_spi_t *dev, uint8_t *buff, size_t len);
+int SpiSendRecv(sx1280_spi_t *dev, uint8_t *msgBuff, size_t msgLen, uint8_t *recvBuff, size_t recvLen);
+int WaitBusyPin(sx1280_spi_t *dev);
+
+void PrintBuffHex(uint8_t *buff, size_t len);
+void PrintBuffDec(uint8_t *buff, size_t len);
+void PrintBuffChar(uint8_t *buff, size_t len);
+
+int GetStatus(sx1280_spi_t *dev, uint8_t *status);
+int WriteRegister(sx1280_spi_t *dev, uint16_t addr, uint8_t *data, size_t len);
+int ReadRegister(sx1280_spi_t *dev, uint8_t *recv, size_t len, uint16_t addr);
+int WriteBuffer(sx1280_spi_t *dev, uint8_t *data, size_t len);
+int ReadBuffer(sx1280_spi_t *dev, uint8_t *recv, size_t len, uint8_t addr);
+int SetSleep(sx1280_spi_t *dev, uint8_t sleepConfig);
+int SetStandby(sx1280_spi_t *dev, uint8_t standbyConfig);
+int SetFs(sx1280_spi_t *dev);
+int SetTx(sx1280_spi_t *dev, uint8_t periodBase, uint16_t periodBaseCount);
+int SetRx(sx1280_spi_t *dev, uint8_t periodBase, uint16_t periodBaseCount);
+int SetRxDutyCycle(sx1280_spi_t *dev, uint8_t periodBase, uint16_t rxPeriodBaseCount, uint16_t sleepPeriodBaseCount);
+int SetCad(sx1280_spi_t *dev);
+int SetTxContinuousWave(sx1280_spi_t *dev);
+int SetTxContinuousPreamble(sx1280_spi_t *dev);
+int SetPacketType(sx1280_spi_t *dev, uint8_t packetType);
+int GetPacketType(sx1280_spi_t *dev, uint8_t *packetType);
+int SetRfFrequency(sx1280_spi_t *dev, uint8_t rfFrequency[3]);
+int SetTxParams(sx1280_spi_t *dev, uint8_t power, uint8_t rampTime);
+int SetCadParams(sx1280_spi_t *dev, uint8_t cadSymbolNum);
+int SetBufferBaseAddress(sx1280_spi_t *dev, uint8_t txBaseAddress, uint8_t rxBaseAddress);
+int SetModulationParams(sx1280_spi_t *dev, uint8_t modParam[3]);
+int SetPacketParams(sx1280_spi_t *dev, uint8_t packetParams[7]);
+int GetRxBufferStatus(sx1280_spi_t *dev, uint8_t recv[2]);
+int GetPacketStatus(sx1280_spi_t *dev, uint8_t recv[5]);
+int GetRssiLnst(sx1280_spi_t *dev, uint8_t *rssiLnst);
+int SetDioIrqParams(sx1280_spi_t *dev, uint16_t irqMask, uint16_t dio1Mask, uint16_t dio2Mask, uint16_t dio3Mask);
+int GetIrqStatus(sx1280_spi_t *dev, uint16_t *irq);
+int ClrIrqStatus(sx1280_spi_t *dev, uint16_t irqMask);
+int SetRegulatorMode(sx1280_spi_t *dev, uint8_t regulatorMode);
+int SetSaveContext(sx1280_spi_t *dev);
+int SetAutoFS(sx1280_spi_t *dev, uint8_t state);
+int SetAutoTx(sx1280_spi_t *dev, uint8_t time);
+int SetPerfCounterMode(sx1280_spi_t *dev, uint8_t perfCounterMode);
+int SetLongPreamble(sx1280_spi_t *dev, uint8_t enable);
+int SetUartSpeed(sx1280_spi_t *dev, uint8_t uartSpeed);
+int SetRangingRole(sx1280_spi_t *dev, uint8_t mode);
+int SetAdvancedRanging(sx1280_spi_t *dev, uint8_t state);
 
 #endif /* SX1280_SPI_H */

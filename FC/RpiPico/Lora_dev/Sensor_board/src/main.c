@@ -8,6 +8,8 @@
 #include "bmp3.h"
 #include "bno055.h"
 #include "common.h"
+#include "GFX.h"
+#include "SSD1309.h"
 /* configuration */
 #include "config.h"
 
@@ -26,6 +28,8 @@ struct bno055_all_float_t
     struct bno055_linear_accel_float_t lin_accel; /* Linear acceleration data */
     struct bno055_gravity_float_t grav_accel;     /* Gravity acceleration data */
 };
+
+struct GFX gfx;
 
 s8 BNO055_I2C_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 {
@@ -104,6 +108,8 @@ int main()
         }
     }
 
+    printf("123\n");
+
     int ret;
     // Initialize BNO055 sensor
     ret = bno055_init(&bno055);
@@ -181,6 +187,20 @@ int main()
     bmpSettings.op_mode = BMP3_MODE_NORMAL;
     rslt = bmp3_set_op_mode(&bmpSettings, &bmp388);
     bmp3_check_rslt("bmp3_set_op_mode", rslt);
+
+    sleep_ms(1000);
+
+    GFX_init(&gfx, 0x3C, 128, 64, SSD_I2C, SSD_RST_PIN);
+    printf("GFX initialized\n");
+    // SSD1309_displayON(&gfx.base, 1);
+    // printf("Display ON\n");
+    SSD1309_clear(&gfx.base, BLACK);
+    printf("Display cleared\n");
+    GFX_drawString(&gfx, 20, 20, "Hello World!", WHITE);
+    printf("String drawn\n");
+    SSD1309_display(&gfx.base, NULL);
+
+    printf("Starting loop\n");
 
     for (;;)
     {
