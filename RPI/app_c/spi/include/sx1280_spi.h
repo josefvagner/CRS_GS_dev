@@ -27,6 +27,13 @@
 #define DF_CYCLICAL_REDUNDANCY_CHECK 0x20
 #define DF_CHIRP_INVERT 0x40
 
+#define IRQ 0b0100000001100011
+#define DIO1 0b0000000000000001
+#define DIO2 0b0000000000000010
+#define DIO3 0b0100000001100000
+
+#define BUSY_TIMEOUT_MS 1000
+
 /* ------------ Defining SD Card Command Index with Hexadecimel Commands ------------ */
 
 /*  Retrieve the transceiver status
@@ -292,8 +299,20 @@
 
 #define SET_PERF_COUNTER_MODE 0x9C
 
+enum LORA_STATE
+{
+    SLEEP,
+    STANDBY_RC,
+    STANDBY_XOSC,
+    FS,
+    TX,
+    RX,
+    CAD
+};
+
 typedef struct sx1280_spi_t
 {
+    int pi;
     int spi;
     unsigned int spiChen;
     unsigned int misoPin;
@@ -302,6 +321,10 @@ typedef struct sx1280_spi_t
     unsigned int csPin;
     unsigned int busyPin;
     unsigned int resetPin;
+    unsigned int dio1Pin;
+    unsigned int dio2Pin;
+    unsigned int dio3Pin;
+    unsigned int state;
 } sx1280_spi_t;
 
 typedef struct
@@ -329,23 +352,26 @@ typedef struct
     uint8_t parachute_released;
 } GsMsg_t;
 
-static int pi = -1;
+typedef struct
+{
+    uint8_t idx;
+} GsPingMsg_t;
 
 long long millis();
 
-void sx1280SPIInit(sx1280_spi_t *dev);
-int resetSx1280(sx1280_spi_t *dev);
-void waitForSetup(sx1280_spi_t *dev);
+void Sx1280SPIInit(sx1280_spi_t *dev);
+int ResetSx1280(sx1280_spi_t *dev);
+void WaitForSetup(sx1280_spi_t *dev);
 
-void myMemcpy(void *dest, void *src, size_t len);
+void MyMemcpy(void *dest, void *src, size_t len);
 
-int spiSend(sx1280_spi_t *dev, uint8_t *buff, size_t len);
-int spiSendRecv(sx1280_spi_t *dev, uint8_t *msgBuff, size_t msgLen, uint8_t *recvBuff, size_t recvLen);
-int waitBusyPin(sx1280_spi_t *dev);
+int SpiSend(sx1280_spi_t *dev, uint8_t *buff, size_t len);
+int SpiSendRecv(sx1280_spi_t *dev, uint8_t *msgBuff, size_t msgLen, uint8_t *recvBuff, size_t recvLen);
+int WaitBusyPin(sx1280_spi_t *dev);
 
-void printBuffHex(uint8_t *buff, size_t len);
-void printBuffDec(uint8_t *buff, size_t len);
-void printBuffChar(uint8_t *buff, size_t len);
+void PrintBuffHex(uint8_t *buff, size_t len);
+void PrintBuffDec(uint8_t *buff, size_t len);
+void PrintBuffChar(uint8_t *buff, size_t len);
 
 int GetStatus(sx1280_spi_t *dev, uint8_t *status);
 int WriteRegister(sx1280_spi_t *dev, uint16_t addr, uint8_t *data, size_t len);

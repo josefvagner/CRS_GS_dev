@@ -11,6 +11,8 @@
 #define SERVER_PORT 8000
 #define ENDPOINT "/json_update"
 
+#define PING_FREQ_HZ 10
+
 char *convert_to_json(GsMsg_t *data)
 {
     cJSON *root = cJSON_CreateObject();
@@ -80,56 +82,78 @@ void sendToApi(const char *json)
 int main()
 {
     printf("starting....RX\n");
-    sx1280_spi_t dev = {-1, 0, 9, 10, 11, 22, 17, 27};
-    sx1280SPIInit(&dev);
-    waitForSetup(&dev);
+    sx1280_spi_t dev = {-1, -1, 0, 9, 10, 11, 22, 17, 27, 23, 24, 25, STANDBY_RC};
+    Sx1280SPIInit(&dev);
+    WaitForSetup(&dev);
 
     uint8_t rxBuffStatus[2];
-    uint8_t msgRaw[256];
     GsMsg_t msg;
-    uint16_t irq = 0;
+    GsPingMsg_t ping = {0};
+
+    long long tLastPing = 0;
 
     while (true)
     {
-        irq = 0;
-        if (GetIrqStatus(&dev, &irq) == -1)
+        if (gpio_read(dev.pi, dev.dio1Pin)) // TxDone
         {
-            waitForSetup(&dev);
+            if (gpio_read(dev.pi, dev.dio3Pin)) // Error
+            {
+                perror("TX error");
+            }
+            else
+            {
+                printf("Ping done: idx = %d\n", ping.idx);
+                if (SetRx(&dev, 0x02, 0xFFFF) == -1)
+                {
+                    WaitForSetup(&dev);
+                }
+                dev.state = RX;
+            }
         }
-
-        if (irq & 0x02)
+        if (gpio_read(dev.pi, dev.dio2Pin)) // RxDone
         {
-            if (irq & 0b1000000)
+            if (gpio_read(dev.pi, dev.dio3Pin)) // Error
             {
-                printf("Crc error...\n");
-            }
-            else if (irq & 0b100000)
-            {
-                printf("Header error...\n");
-            }
-            else if (irq & 0b100000000000000)
-            {
-                printf("Timeout...\n");
+                perror("RX error");
             }
             else
             {
                 if (GetRxBufferStatus(&dev, rxBuffStatus) == -1)
                 {
-                    waitForSetup(&dev);
+                    WaitForSetup(&dev);
                 }
-                if (ReadBuffer(&dev, msgRaw, (size_t)rxBuffStatus[0], rxBuffStatus[1]) == -1)
+                if (ReadBuffer(&dev, (uint8_t *)&msg, (size_t)rxBuffStatus[0], rxBuffStatus[1]) == -1)
                 {
-                    waitForSetup(&dev);
+                    WaitForSetup(&dev);
                 }
-                myMemcpy(&msg, msgRaw, (size_t)rxBuffStatus[0]);
                 printf("New msg [%d] [%d]: fsw_state = %d\n", (int)rxBuffStatus[0], (int)rxBuffStatus[1], msg.fsw_state);
                 char *json_string = convert_to_json(&msg);
                 sendToApi(json_string);
                 free(json_string);
             }
+        }
+
+        if ((int)(millis() - tLastPing) >= (int)(1000 / PING_FREQ_HZ))
+        {
+            ping.idx = ping.idx > 100 ? 0 : ping.idx + 1;
+            if (WriteBuffer(&dev, (uint8_t *)&ping, sizeof(ping)) == -1)
+            {
+                WaitForSetup(&dev);
+            }
+
+            if (SetTx(&dev, 0x02, 0) == -1)
+            {
+                WaitForSetup(&dev);
+            }
+            dev.state = TX;
+            tLastPing = millis();
+        }
+
+        if (gpio_read(dev.pi, dev.dio1Pin) || gpio_read(dev.pi, dev.dio2Pin) || gpio_read(dev.pi, dev.dio3Pin))
+        {
             if (ClrIrqStatus(&dev, 0xFFFF) == -1)
             {
-                waitForSetup(&dev);
+                WaitForSetup(&dev);
             }
         }
     }
