@@ -3,7 +3,7 @@
 #include "hardware/uart.h"
 #include "sx1280_spi.h"
 
-#define FREQ_HZ 20
+#define FREQ_HZ 50
 #define PING_TRESHOLD_MS 500
 
 int main()
@@ -12,7 +12,8 @@ int main()
     sleep_ms(1000);
     printf("starting....TX\n");
 
-    sx1280_spi_t dev = {spi0, 19, 16, 18, 17, 7, 6, 1, 2, 3, STANDBY_RC};
+    // sx1280_spi_t dev = {spi0, 19, 16, 18, 17, 7, 6, 1, 2, 3, STANDBY_RC};
+    sx1280_spi_t dev = {spi0, 20, 19, 18, 21, 24, 26, 1, 0, 27, STANDBY_RC};
 
     Sx1280SPIInit(&dev);
     WaitForSetup(&dev);
@@ -29,6 +30,7 @@ int main()
 
     while (true)
     {
+        // printf("dio1 = %d, dio2 = %d, dio3 = %d\n", gpio_get(dev.dio1Pin), gpio_get(dev.dio2Pin), gpio_get(dev.dio3Pin));
         if (gpio_get(dev.dio1Pin)) // TxDone
         {
             if (gpio_get(dev.dio3Pin)) // Error
@@ -38,6 +40,10 @@ int main()
             else
             {
                 printf("Tx done: fsw_state = %d\n", msg.fsw_state);
+                if (ClrIrqStatus(&dev, 0xFFFF) == -1)
+                {
+                    WaitForSetup(&dev);
+                }
                 if (SetRx(&dev, 0x02, 0xFFFF) == -1)
                 {
                     WaitForSetup(&dev);
@@ -71,6 +77,11 @@ int main()
             msg.fsw_state = msg.fsw_state >= 9 ? 0 : msg.fsw_state + 1;
             printf("Sending new msg: fsw_state = %d, time = %d\n", msg.fsw_state, (int)(millis() - tSend));
             if (WriteBuffer(&dev, (uint8_t *)&msg, sizeof(msg)) == -1)
+            {
+                WaitForSetup(&dev);
+            }
+
+            if (ClrIrqStatus(&dev, 0xFFFF) == -1)
             {
                 WaitForSetup(&dev);
             }

@@ -23,7 +23,7 @@ void Sx1280SPIInit(sx1280_spi_t *dev)
     gpio_set_dir(dev->resetPin, 1);
     gpio_put(dev->resetPin, 1);
 
-    spi_init(dev->spi, 1000000);
+    spi_init(dev->spi, (uint)5e6);
     gpio_set_function(dev->sckPin, GPIO_FUNC_SPI);
     gpio_set_function(dev->mosiPin, GPIO_FUNC_SPI);
     gpio_set_function(dev->misoPin, GPIO_FUNC_SPI);
@@ -39,8 +39,9 @@ int ResetSx1280(sx1280_spi_t *dev)
 
     gpio_put(dev->resetPin, 0);
     gpio_put(dev->csPin, 1);
-    sleep_us(2000);
+    sleep_us(20000);
     gpio_put(dev->resetPin, 1);
+    sleep_us(20000);
 
     if (SetStandby(dev, 0x00) == -1)
     {
@@ -120,6 +121,10 @@ void WaitForSetup(sx1280_spi_t *dev)
     while (ResetSx1280(dev) == -1)
     {
         /* wait for setup */
+    }
+    if (ClrIrqStatus(dev, 0xFFFF) == -1)
+    {
+        WaitForSetup(dev);
     }
     switch (dev->state)
     {

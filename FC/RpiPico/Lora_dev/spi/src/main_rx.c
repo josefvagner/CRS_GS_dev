@@ -37,6 +37,10 @@ int main()
             else
             {
                 printf("Ping done: idx = %d\n", ping.idx);
+                if (ClrIrqStatus(&dev, 0xFFFF) == -1)
+                {
+                    WaitForSetup(&dev);
+                }
                 if (SetRx(&dev, 0x02, 0xFFFF) == -1)
                 {
                     WaitForSetup(&dev);
@@ -68,6 +72,11 @@ int main()
         {
             ping.idx = ping.idx > 100 ? 0 : ping.idx + 1;
             if (WriteBuffer(&dev, (uint8_t *)&ping, sizeof(ping)) == -1)
+            {
+                WaitForSetup(&dev);
+            }
+
+            if (ClrIrqStatus(&dev, 0xFFFF) == -1)
             {
                 WaitForSetup(&dev);
             }
