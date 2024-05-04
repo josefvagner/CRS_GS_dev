@@ -46,8 +46,8 @@ int main()
     printf("init correct spi: %d\n", dev.spi);
     WaitForSetup(&dev);
     printf("setup correct\n");
-    SetRx(&dev, 0x02, 0xFFFF);
-    printf("set rx correct\n");
+    // SetRx(&dev, 0x02, 0xFFFF);
+    // printf("set rx correct\n");
 
     uint8_t rxBuffStatus[2];
     GsMsg_t msg;
@@ -55,22 +55,37 @@ int main()
 
     long long tLastPing = 0;
     long long tStart = millis();
+    long long tLastMsg = millis();
 
     int lastFswState = -1;
     long missedPackets = 0;
     long allPackets = 0;
 
+    int dio1 = 0;
+    int dio2 = 0;
+    int dio3 = 0;
+
     while ((millis() - tStart) <= 10 * 1e3)
     {
-        if (gpio_read(dev.pi, dev.dio1Pin)) // TxDone
+        dio1 = gpio_read(dev.pi, dev.dio1Pin);
+        dio2 = gpio_read(dev.pi, dev.dio2Pin);
+        dio3 = gpio_read(dev.pi, dev.dio3Pin);
+
+        if (dio1) // TxDone
         {
-            if (gpio_read(dev.pi, dev.dio3Pin)) // Error
+            if (dio3) // Error
             {
                 perror("TX error");
             }
             else
             {
                 printf("Ping done: idx = %d\n", ping.idx);
+
+                if (ClrIrqStatus(&dev, 0xFFFF) == -1)
+                {
+                    WaitForSetup(&dev);
+                }
+
                 if (SetRx(&dev, 0x02, 0xFFFF) == -1)
                 {
                     WaitForSetup(&dev);
@@ -78,10 +93,10 @@ int main()
                 dev.state = RX;
             }
         }
-        if (gpio_read(dev.pi, dev.dio2Pin)) // RxDone
+        if (dio2) // RxDone
         {
             allPackets += 1;
-            if (gpio_read(dev.pi, dev.dio3Pin)) // Error
+            if (dio3) // Error
             {
                 missedPackets += 1;
                 perror("RX error");
@@ -96,7 +111,8 @@ int main()
                 {
                     WaitForSetup(&dev);
                 }
-                printf("New msg [%d] [%d]: fsw_state = %d\n", (int)rxBuffStatus[0], (int)rxBuffStatus[1], msg.fsw_state);
+                printf("New msg [%d] [%d]: fsw_state = %d , time = %d\n", (int)rxBuffStatus[0], (int)rxBuffStatus[1], msg.fsw_state, millis() - tLastMsg);
+                tLastMsg = millis();
                 // char *json_string = convert_to_json(&msg);
                 // sendToApi(json_string);
                 // free(json_string);
@@ -111,6 +127,11 @@ int main()
                 WaitForSetup(&dev);
             }
 
+            if (ClrIrqStatus(&dev, 0xFFFF) == -1)
+            {
+                WaitForSetup(&dev);
+            }
+
             if (SetTx(&dev, 0x02, 0) == -1)
             {
                 WaitForSetup(&dev);
@@ -119,7 +140,7 @@ int main()
             tLastPing = millis();
         }
 
-        if (gpio_read(dev.pi, dev.dio1Pin) || gpio_read(dev.pi, dev.dio2Pin) || gpio_read(dev.pi, dev.dio3Pin))
+        if (dio1 || dio2 || dio3)
         {
             if (ClrIrqStatus(&dev, 0xFFFF) == -1)
             {

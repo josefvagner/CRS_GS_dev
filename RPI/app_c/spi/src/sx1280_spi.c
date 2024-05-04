@@ -46,19 +46,19 @@ void Sx1280SPIInit(sx1280_spi_t *dev)
         set_mode(dev->pi, dev->csPin, PI_OUTPUT);
     }
 
-    if (get_mode(dev->pi, dev->sckPin) != PI_ALT0)
+    if (get_mode(dev->pi, dev->sckPin) != PI_ALT4)
     {
-        set_mode(dev->pi, dev->sckPin, PI_ALT0);
+        set_mode(dev->pi, dev->sckPin, PI_ALT4);
     }
 
-    if (get_mode(dev->pi, dev->mosiPin) != PI_ALT0)
+    if (get_mode(dev->pi, dev->mosiPin) != PI_ALT4)
     {
-        set_mode(dev->pi, dev->mosiPin, PI_ALT0);
+        set_mode(dev->pi, dev->mosiPin, PI_ALT4);
     }
 
-    if (get_mode(dev->pi, dev->misoPin) != PI_ALT0)
+    if (get_mode(dev->pi, dev->misoPin) != PI_ALT4)
     {
-        set_mode(dev->pi, dev->misoPin, PI_ALT0);
+        set_mode(dev->pi, dev->misoPin, PI_ALT4);
     }
 
     gpio_write(dev->pi, dev->resetPin, 0);
@@ -66,7 +66,7 @@ void Sx1280SPIInit(sx1280_spi_t *dev)
     usleep(2000);
     gpio_write(dev->pi, dev->resetPin, 1);
 
-    dev->spi = spi_open(dev->pi, dev->spiChen, 1000000, 0);
+    dev->spi = spi_open(dev->pi, dev->spiChen, (unsigned int)5e6, 0);
     usleep(1000);
     if (dev->spi < 0)
     {
@@ -108,19 +108,19 @@ int ResetSx1280(sx1280_spi_t *dev)
         set_mode(dev->pi, dev->csPin, PI_OUTPUT);
     }
 
-    if (get_mode(dev->pi, dev->sckPin) != PI_ALT0)
+    if (get_mode(dev->pi, dev->sckPin) != PI_ALT4)
     {
-        set_mode(dev->pi, dev->sckPin, PI_ALT0);
+        set_mode(dev->pi, dev->sckPin, PI_ALT4);
     }
 
-    if (get_mode(dev->pi, dev->mosiPin) != PI_ALT0)
+    if (get_mode(dev->pi, dev->mosiPin) != PI_ALT4)
     {
-        set_mode(dev->pi, dev->mosiPin, PI_ALT0);
+        set_mode(dev->pi, dev->mosiPin, PI_ALT4);
     }
 
-    if (get_mode(dev->pi, dev->misoPin) != PI_ALT0)
+    if (get_mode(dev->pi, dev->misoPin) != PI_ALT4)
     {
-        set_mode(dev->pi, dev->misoPin, PI_ALT0);
+        set_mode(dev->pi, dev->misoPin, PI_ALT4);
     }
 
     gpio_write(dev->pi, dev->resetPin, 0);
@@ -206,6 +206,11 @@ void WaitForSetup(sx1280_spi_t *dev)
     while (ResetSx1280(dev) == -1)
     {
         /* wait for setup */
+    }
+
+    if (ClrIrqStatus(dev, 0xFFFF) == -1)
+    {
+        WaitForSetup(dev);
     }
 
     switch (dev->state)

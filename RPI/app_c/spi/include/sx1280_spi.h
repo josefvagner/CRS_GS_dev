@@ -13,7 +13,7 @@
 #define RF_FREQ_2 0x9D
 #define RF_FREQ_3 0x89
 
-#define MOD_PARAM_1 0x50
+#define MOD_PARAM_1 0x70
 #define MOD_PARAM_2 0x0A
 #define MOD_PARAM_3 0x01
 
