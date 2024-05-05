@@ -19,39 +19,64 @@
 #include <linux/can.h>
 #include <linux/can/raw.h>
 
-#define SERVER_IP "192.168.88.251"
+#define SERVER_IP "0.0.0.0"
 #define SERVER_PORT 8000
 #define ENDPOINT "/json_update"
 
 #define PING_FREQ_HZ 10
 
-char *convert_to_json(GsMsg_t *data)
+char *convert_to_json(sd_csv_data_t *data)
 {
     cJSON *root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "velocity", data->velocity);
-    cJSON_AddNumberToObject(root, "rel_alti", data->rel_alti);
-    cJSON_AddNumberToObject(root, "in_timestamp", data->in_timestamp);
-    cJSON_AddNumberToObject(root, "out_timestamp", data->out_timestamp);
-    cJSON_AddNumberToObject(root, "bmp_pres", data->bmp_pres);
-    cJSON_AddNumberToObject(root, "bmp_temp", data->bmp_temp);
-    cJSON_AddNumberToObject(root, "ina_Curr", data->ina_curr);
-    cJSON_AddNumberToObject(root, "ina_Voltage", data->ina_volt);
-    cJSON_AddNumberToObject(root, "mpu_mag_x", data->mpu_mag_x);
-    cJSON_AddNumberToObject(root, "mpu_mag_y", data->mpu_mag_y);
-    cJSON_AddNumberToObject(root, "mpu_mag_z", data->mpu_mag_z);
-    cJSON_AddNumberToObject(root, "mpu_accel_x", data->mpu_accel_x);
-    cJSON_AddNumberToObject(root, "mpu_accel_y", data->mpu_accel_y);
-    cJSON_AddNumberToObject(root, "mpu_accel_z", data->mpu_accel_z);
-    cJSON_AddNumberToObject(root, "mpu_gyro_x", data->mpu_gyro_x);
-    cJSON_AddNumberToObject(root, "mpu_gyro_y", data->mpu_gyro_y);
-    cJSON_AddNumberToObject(root, "mpu_gyro_z", data->mpu_gyro_z);
-    cJSON_AddNumberToObject(root, "fsw_state", data->fsw_state);
-    cJSON_AddNumberToObject(root, "payload_released", data->payload_released);
-    cJSON_AddNumberToObject(root, "drogue_released", data->drogue_released);
-    cJSON_AddNumberToObject(root, "parachute_released", data->parachute_released);
+    cJSON *fsw_state = cJSON_CreateObject();
+    cJSON *board_status = cJSON_CreateObject();
+    cJSON *eject_output = cJSON_CreateObject();
+    cJSON *bmp_data = cJSON_CreateObject();
+    cJSON *pos_data = cJSON_CreateObject();
+    cJSON *bno_data = cJSON_CreateObject();
+    cJSON *ina_data = cJSON_CreateObject();
 
-    char *json_string = cJSON_Print(root); // Convert to string
-    cJSON_Delete(root);                    // Free memory
+    cJSON_AddNumberToObject(root, "timestamp", data->timestamp);
+
+    cJSON_AddNumberToObject(fsw_state, "state", data->fsw_state.state);
+
+    cJSON_AddNumberToObject(board_status, "pwb_status", data->board_status.pwb_status);
+    cJSON_AddNumberToObject(board_status, "cnb_status", data->board_status.cnb_status);
+    cJSON_AddNumberToObject(board_status, "snb_status", data->board_status.snb_status);
+    cJSON_AddNumberToObject(board_status, "cmb_status", data->board_status.cmb_status);
+
+    cJSON_AddNumberToObject(eject_output, "doors", data->eject_output.doors);
+    cJSON_AddNumberToObject(eject_output, "payload", data->eject_output.payload);
+    cJSON_AddNumberToObject(eject_output, "drogue", data->eject_output.drogue);
+    cJSON_AddNumberToObject(eject_output, "parachute", data->eject_output.parachute);
+
+    cJSON_AddNumberToObject(bmp_data, "pressure", data->bmp_data.pressure);
+    cJSON_AddNumberToObject(bmp_data, "temperature", data->bmp_data.temperature);
+
+    cJSON_AddNumberToObject(pos_data, "abs_altitude", data->pos_data.abs_altitude);
+    cJSON_AddNumberToObject(pos_data, "rel_altitude", data->pos_data.rel_altitude);
+    cJSON_AddNumberToObject(pos_data, "est_velocity", data->pos_data.est_velocity);
+    cJSON_AddNumberToObject(pos_data, "est_acceleration", data->pos_data.est_acceleration);
+
+    cJSON_AddNumberToObject(bno_data, "acceleration", data->bno_data.acceleration);
+    cJSON_AddNumberToObject(bno_data, "rotation", data->bno_data.rotation);
+    cJSON_AddNumberToObject(bno_data, "euler_h", data->bno_data.euler_h);
+    cJSON_AddNumberToObject(bno_data, "euler_p", data->bno_data.euler_p);
+    cJSON_AddNumberToObject(bno_data, "euler_r", data->bno_data.euler_r);
+
+    cJSON_AddNumberToObject(ina_data, "voltage", data->ina_data.voltage);
+    cJSON_AddNumberToObject(ina_data, "current", data->ina_data.current);
+
+    cJSON_AddItemToObject(root, "fsw_state", fsw_state);
+    cJSON_AddItemToObject(root, "board_status", board_status);
+    cJSON_AddItemToObject(root, "eject_output", eject_output);
+    cJSON_AddItemToObject(root, "bmp_data", bmp_data);
+    cJSON_AddItemToObject(root, "pos_data", pos_data);
+    cJSON_AddItemToObject(root, "bno_data", bno_data);
+    cJSON_AddItemToObject(root, "ina_data", ina_data);
+
+    char *json_string = cJSON_Print(root);
+    cJSON_Delete(root);
 
     return json_string;
 }
@@ -91,59 +116,120 @@ void sendToApi(const char *json)
     close(sockfd);
 }
 
+bool sendMsg(sx1280_spi_t *dev, GsPingMsg_t *msg)
+{
+    int dio1, dio3;
+    bool ret = false;
+
+    if (WriteBuffer(dev, (uint8_t *)msg, sizeof(*msg)) == -1)
+    {
+        WaitForSetup(dev);
+    }
+
+    if (ClrIrqStatus(dev, 0xFFFF) == -1)
+    {
+        WaitForSetup(dev);
+    }
+
+    if (SetTx(dev, 0x02, 0) == -1)
+    {
+        WaitForSetup(dev);
+    }
+    dev->state = TX;
+
+    while (true)
+    {
+        dio1 = gpio_read(dev->pi, dev->dio1Pin);
+        dio3 = gpio_read(dev->pi, dev->dio3Pin);
+        if (dio3) // Error
+        {
+            uint16_t irq = 0;
+            if (GetIrqStatus(dev, &irq) == -1)
+            {
+                WaitForSetup(dev);
+            }
+            printf("Error in tx mode irq = %b\n", irq);
+            ret = false;
+            break;
+        }
+        if (dio1) // TxDone
+        {
+            ret = true;
+            break;
+        }
+        // usleep(100);
+    }
+
+    if (ClrIrqStatus(dev, 0xFFFF) == -1)
+    {
+        WaitForSetup(dev);
+    }
+    if (SetRx(dev, 0x02, 0xFFFF) == -1)
+    {
+        WaitForSetup(dev);
+    }
+    dev->state = RX;
+    return ret;
+}
+
 int main()
 {
     printf("starting....RX\n");
-    sx1280_spi_t dev = {-1, -1, 1, 19, 20, 21, 18, 12, 6, 13, 16, 14, STANDBY_RC};
+
+    sx1280_spi_t dev = {
+        .pi = -1,
+        .spi = -1,
+        .spiChen = 1,
+        .misoPin = 19,
+        .mosiPin = 20,
+        .sckPin = 21,
+        .csPin = 18,
+        .busyPin = 12,
+        .resetPin = 6,
+        .dio1Pin = 13,
+        .dio2Pin = 16,
+        .dio3Pin = 14,
+        .state = STANDBY_RC,
+    };
     Sx1280SPIInit(&dev);
     WaitForSetup(&dev);
 
     uint8_t rxBuffStatus[2];
-    GsMsg_t msg;
+    sd_csv_data_t msg;
     GsPingMsg_t ping = {0};
 
     long long tLastPing = 0;
     long long tLastMsg = millis();
+    long long tNow = millis();
+    long long msgPeriod = (long long)(1000 / PING_FREQ_HZ);
 
     int dio1 = 0;
     int dio2 = 0;
     int dio3 = 0;
 
+    uint16_t irq = 0;
+
     printf("starting\n");
 
     while (true)
     {
+        tNow = millis();
         dio1 = gpio_read(dev.pi, dev.dio1Pin);
         dio2 = gpio_read(dev.pi, dev.dio2Pin);
         dio3 = gpio_read(dev.pi, dev.dio3Pin);
 
-        if (dio1) // TxDone
+        if (dev.state == RX && (dio2 || dio3))
         {
-            if (dio3) // Error
+            if (dio3)
             {
-                perror("TX error");
-            }
-            else
-            {
-                // printf("Ping done: idx = %d\n", ping.idx);
-                if (ClrIrqStatus(&dev, 0xFFFF) == -1)
+                irq = 0;
+                if (GetIrqStatus(&dev, &irq) == -1)
                 {
                     WaitForSetup(&dev);
                 }
-                if (SetRx(&dev, 0x02, 0xFFFF) == -1)
-                {
-                    WaitForSetup(&dev);
-                }
-                dev.state = RX;
+                printf("Error: irq = %b\n", irq);
             }
-        }
-        if (dio2) // RxDone
-        {
-            if (dio3) // Error
-            {
-                perror("RX error");
-            }
-            else
+            else if (dio2) // RxDone
             {
                 if (GetRxBufferStatus(&dev, rxBuffStatus) == -1)
                 {
@@ -153,33 +239,29 @@ int main()
                 {
                     WaitForSetup(&dev);
                 }
-                printf("New msg: fsw_state = %d \t freq = %d Hz\n", msg.fsw_state, (int)(1000 / (millis() - tLastMsg)));
-                char *json_string = convert_to_json(&msg);
-                sendToApi(json_string);
-                free(json_string);
-                tLastMsg = millis();
+                printf("New msg: fsw_state = %d \t freq = %d Hz\n", msg.fsw_state.state, (int)(1000 / (tNow - tLastMsg)));
+                if (msg.fsw_state.state < 10)
+                {
+                    char *json_string = convert_to_json(&msg);
+                    sendToApi(json_string);
+                    free(json_string);
+                }
+                tLastMsg = tNow;
             }
-        }
-
-        if ((millis() - tLastPing) >= (long long)(1000 / PING_FREQ_HZ))
-        {
-            ping.idx = ping.idx > 100 ? 0 : ping.idx + 1;
-            if (WriteBuffer(&dev, (uint8_t *)&ping, sizeof(ping)) == -1)
-            {
-                WaitForSetup(&dev);
-            }
-
             if (ClrIrqStatus(&dev, 0xFFFF) == -1)
             {
                 WaitForSetup(&dev);
             }
+        }
 
-            if (SetTx(&dev, 0x02, 0) == -1)
+        if ((tNow - tLastPing) >= msgPeriod)
+        {
+            ping.idx = ping.idx > 100 ? 0 : ping.idx + 1;
+            if (sendMsg(&dev, &ping))
             {
-                WaitForSetup(&dev);
+                // printf("Ping sended idx = %d, freq = %d\n", ping.idx, (int)(1000 / (millis() - tLastPing)));
+                tLastPing = tNow;
             }
-            dev.state = TX;
-            tLastPing = millis();
         }
 
         if (dio1 || dio2 || dio3)
@@ -189,6 +271,7 @@ int main()
                 WaitForSetup(&dev);
             }
         }
+        usleep(100);
     }
     return 0;
 }

@@ -41,9 +41,9 @@ void Sx1280SPIInit(sx1280_spi_t *dev)
         set_mode(dev->pi, dev->dio3Pin, PI_INPUT);
     }
 
-    if (get_mode(dev->pi, dev->csPin) != PI_OUTPUT)
+    if (get_mode(dev->pi, dev->csPin) != PI_ALT4)
     {
-        set_mode(dev->pi, dev->csPin, PI_OUTPUT);
+        set_mode(dev->pi, dev->csPin, PI_ALT4);
     }
 
     if (get_mode(dev->pi, dev->sckPin) != PI_ALT4)
@@ -66,7 +66,7 @@ void Sx1280SPIInit(sx1280_spi_t *dev)
     usleep(2000);
     gpio_write(dev->pi, dev->resetPin, 1);
 
-    dev->spi = spi_open(dev->pi, dev->spiChen, (unsigned int)5e6, 0);
+    dev->spi = spi_open(dev->pi, dev->spiChen, (unsigned int)5e6, 256);
     usleep(1000);
     if (dev->spi < 0)
     {

@@ -352,6 +352,68 @@ typedef struct
     uint8_t parachute_released;
 } GsMsg_t;
 
+typedef struct sd_csv_data_state_t
+{
+    uint8_t state;
+} sd_csv_data_state_t;
+
+typedef struct sd_csv_data_status_t
+{
+    uint8_t pwb_status;
+    uint8_t cnb_status;
+    uint8_t snb_status;
+    uint8_t cmb_status;
+} sd_csv_data_status_t;
+
+typedef struct sd_csv_data_eject_outputs_t
+{
+    uint8_t doors;
+    uint8_t payload;
+    uint8_t drogue;
+    uint8_t parachute;
+} sd_csv_data_eject_outputs_t;
+
+typedef struct sd_csv_data_bmp_t
+{
+    float pressure;
+    float temperature;
+} sd_csv_data_bmp_t;
+
+typedef struct sd_csv_data_pos_t
+{
+    float abs_altitude;
+    float rel_altitude;
+    float est_velocity;
+    float est_acceleration;
+} sd_csv_data_pos_t;
+
+typedef struct sd_csv_data_bno_t
+{
+    float acceleration;
+    float rotation;
+    float euler_h;
+    float euler_p;
+    float euler_r;
+} sd_csv_data_bno_t;
+
+typedef struct sd_csv_data_ina_t
+{
+    float voltage;
+    float current;
+} sd_csv_data_ina_t;
+
+typedef struct sd_csv_data_t
+{
+    unsigned int timestamp;
+    sd_csv_data_state_t fsw_state;
+    sd_csv_data_status_t board_status;
+    sd_csv_data_eject_outputs_t eject_output;
+    sd_csv_data_bmp_t bmp_data;
+    sd_csv_data_pos_t pos_data;
+    sd_csv_data_bno_t bno_data;
+    sd_csv_data_ina_t ina_data;
+} sd_csv_data_t;
+
 typedef struct
 {
     uint8_t idx;

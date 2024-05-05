@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
-from json import JSONDecodeError
+from json import JSONDecodeError, dumps
 import requests
 from time import time_ns
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,11 +33,11 @@ def dbUpdate():
     taskRunnig = False
 
 def logData():
-    logging.info(str(data) + ",")
+    logging.info(dumps(data) + ",")
 
 @app.get("/")
 def read_root():
-    data["time"] = datetime.now().strftime("%H:%M:%S")
+    data["timestamp_gs"] = datetime.now().strftime("%H:%M:%S")
     return data
 
 @app.post("/json_update")
