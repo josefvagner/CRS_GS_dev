@@ -7,7 +7,6 @@
 
 #include "sx1280_spi.h"
 #include "cJSON.h"
-#include "can_message.h"
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
