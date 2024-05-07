@@ -34,7 +34,7 @@ typedef struct
 
 typedef struct
 {
-    GsPingMsg_t msg;
+    GsLoraMsg_t msg;
     pthread_mutex_t lock;
     bool updated; // Flag to indicate new data
 } lora_send_shared_data;
@@ -196,7 +196,7 @@ void *api_sender(void *arg)
     return NULL;
 }
 
-bool sendLoraMsg(sx1280_spi_t *dev, GsPingMsg_t *msg)
+bool sendLoraMsg(sx1280_spi_t *dev, GsLoraMsg_t *msg)
 {
     int dio1, dio3;
     bool ret = false;
@@ -258,12 +258,24 @@ void *lora_thread(void *arg)
     sx1280_spi_t *dev = (sx1280_spi_t *)arg;
 
     uint8_t rxBuffStatus[2];
-    sd_csv_data_t msg;
-    GsPingMsg_t ping = {0};
+    sd_csv_data_t msg_fsw = {0};
+    GsLoraMsg_t msg_gs = {0};
+
+    pthread_mutex_lock(&lora_recv_data.lock);
+    memcpy(&lora_recv_data.msg, &msg_fsw, sizeof(msg_fsw));
+    memcpy(&lora_recv_data_api.msg, &msg_fsw, sizeof(msg_fsw));
+    pthread_mutex_unlock(&lora_recv_data.lock);
+
+    pthread_mutex_lock(&lora_send_data.lock);
+    memcpy(&msg_gs, &lora_send_data.msg, sizeof(lora_send_data.msg));
+    pthread_mutex_unlock(&lora_send_data.lock);
 
     long long tLastPing = 0;
     long long tLastMsg = millis();
     long long tNow = millis();
+
+    // long long tStart = millis();
+    // long long diff = 0;
 
     int dio1 = 0;
     int dio2 = 0;
@@ -274,6 +286,59 @@ void *lora_thread(void *arg)
     while (run)
     {
         tNow = millis();
+        /* simulation
+        diff = tNow - tStart;
+
+        if (diff >= 5000)
+        {
+            msg_fsw.fsw_state.state = SM_STATE_READY;
+        }
+        if (diff >= 10000)
+        {
+            msg_fsw.fsw_state.state = SM_STATE_ARM;
+        }
+        if (diff >= 15000)
+        {
+            msg_fsw.fsw_state.state = SM_STATE_ASCENT;
+            msg_fsw.eject_output.doors = 1;
+        }
+        if (diff >= 20000)
+        {
+            msg_fsw.fsw_state.state = SM_STATE_APOGEE;
+            msg_fsw.eject_output.payload = 1;
+        }
+        if (diff >= 25000)
+        {
+            msg_fsw.fsw_state.state = SM_STATE_DESCENT;
+            msg_fsw.eject_output.drogue = 1;
+        }
+        if (diff >= 30000)
+        {
+            msg_fsw.fsw_state.state = SM_STATE_LANDING;
+            msg_fsw.eject_output.parachute = 1;
+        }
+        if (diff >= 35000)
+        {
+            msg_fsw.fsw_state.state = SM_STATE_LANDED;
+        }
+
+        if ((tNow - tLastPing) >= LORA_SEND_T_MS)
+        {
+            pthread_mutex_lock(&lora_send_data.lock);
+            memcpy(&msg_gs, &lora_send_data.msg, sizeof(msg_gs));
+            lora_send_data.updated = false;
+            pthread_mutex_unlock(&lora_send_data.lock);
+
+            printf("Ping sended idx = %d\t%d %d %d %d %d \t", msg_gs.idx, msg_gs.rbf, msg_gs.main, msg_gs.drogue, msg_gs.cansat, msg_gs.door);
+
+            pthread_mutex_lock(&lora_recv_data.lock);
+            memcpy(&lora_recv_data.msg, &msg_fsw, sizeof(msg_fsw));
+            lora_recv_data.updated = true;
+            pthread_mutex_unlock(&lora_recv_data.lock);
+            tLastPing = tNow;
+        }
+        */
+
         dio1 = gpio_read(dev->pi, dev->dio1Pin);
         dio2 = gpio_read(dev->pi, dev->dio2Pin);
         dio3 = gpio_read(dev->pi, dev->dio3Pin);
@@ -295,17 +360,17 @@ void *lora_thread(void *arg)
                 {
                     WaitForSetup(dev);
                 }
-                if (ReadBuffer(dev, (uint8_t *)&msg, (size_t)rxBuffStatus[0], rxBuffStatus[1]) == -1)
+                if (ReadBuffer(dev, (uint8_t *)&msg_fsw, (size_t)rxBuffStatus[0], rxBuffStatus[1]) == -1)
                 {
                     WaitForSetup(dev);
                 }
-                printf("New msg: fsw_state = %d \t freq = %d Hz\n", msg.fsw_state.state, (int)(1000 / (tNow - tLastMsg)));
-                if (msg.fsw_state.state < 10)
+                printf("New msg_fsw: fsw_state = %d \t freq = %d Hz\n", msg_fsw.fsw_state.state, (int)(1000 / (tNow - tLastMsg)));
+                if (msg_fsw.fsw_state.state < 10)
                 {
                     pthread_mutex_lock(&lora_recv_data.lock);
                     pthread_mutex_lock(&lora_recv_data_api.lock);
-                    memcpy(&lora_recv_data.msg, &msg, sizeof(msg));
-                    memcpy(&lora_recv_data_api.msg, &msg, sizeof(msg));
+                    memcpy(&lora_recv_data.msg, &msg_fsw, sizeof(msg_fsw));
+                    memcpy(&lora_recv_data_api.msg, &msg_fsw, sizeof(msg_fsw));
                     lora_recv_data.updated = true;
                     lora_recv_data_api.updated = true;
                     pthread_mutex_unlock(&lora_recv_data.lock);
@@ -319,15 +384,15 @@ void *lora_thread(void *arg)
             }
         }
 
-        if (((tNow - tLastPing) >= LORA_MSG_FREQ) || lora_send_data.updated)
+        if (((tNow - tLastPing) >= LORA_SEND_T_MS) || lora_send_data.updated)
         {
             pthread_mutex_lock(&lora_send_data.lock);
-            memcpy(&ping, &lora_send_data.msg, sizeof(lora_send_data.msg));
+            memcpy(&msg_gs, &lora_send_data.msg, sizeof(lora_send_data.msg));
             lora_send_data.updated = false;
             pthread_mutex_unlock(&lora_send_data.lock);
-            if (sendLoraMsg(dev, &ping))
+            if (sendLoraMsg(dev, &msg_gs))
             {
-                // printf("Ping sended idx = %d, freq = %d\n", ping.idx, (int)(1000 / (millis() - tLastPing)));
+                // printf("Ping sended idx = %d, freq = %d\n", msg_gs.idx, (int)(1000 / (millis() - tLastPing)));
                 tLastPing = tNow;
             }
         }
@@ -393,6 +458,27 @@ int main()
         .state = STANDBY_RC,
     };
 
+    emergency_timer_data_t timers = {
+        .main = 1.0,
+        .drogue = 1.0,
+        .cansat = 1.0,
+        .door = 1.0,
+    };
+
+    GsLoraMsg_t msg_gs = {
+        .idx = 0,
+        .rbf = 0,
+        .main = 0,
+        .drogue = 0,
+        .cansat = 0,
+        .door = 0,
+        .emergency_timer = timers,
+    };
+
+    sd_csv_data_t msg_fsw = {0};
+
+    lora_send_data.msg = msg_gs;
+
     Sx1280SPIInit(&dev);
     WaitForSetup(&dev);
 
@@ -415,6 +501,7 @@ int main()
     long long last_can_send_time = millis();
     long long testT = millis();
     long long tNow = millis();
+    long long last_lora_msg_recieved_time = 0;
 
     int i = 0;
 
@@ -423,12 +510,13 @@ int main()
         tNow = millis();
         if (recv_data.updated)
         {
-            pthread_mutex_lock(&recv_data.lock);
             // printf("\nReceived a frame with ID: 0x%03X\n", recv_data.frame.can_id);
             if (recv_data.frame.can_dlc > 0)
             {
                 uint64_t tmp = 0;
+                pthread_mutex_lock(&recv_data.lock);
                 memcpy(&tmp, recv_data.frame.data, sizeof(uint64_t));
+                pthread_mutex_unlock(&recv_data.lock);
                 panel.rbf_btn = (tmp >> RBF_BTN_SHIFT) & 0x01;
                 panel.rbf_key_btn = (tmp >> RBF_KEY_BTN_SHIFT) & 0x01;
                 panel.main_btn = (tmp >> MAIN_BTN_SHIFT) & 0x01;
@@ -440,16 +528,118 @@ int main()
                 panel.res_3_btn = (tmp >> RES_3_BTN_SHIFT) & 0x01;
                 panel.res_4_btn = (tmp >> RES_4_BTN_SHIFT) & 0x01;
             }
+            pthread_mutex_lock(&recv_data.lock);
             recv_data.updated = false;
             pthread_mutex_unlock(&recv_data.lock);
+        }
+
+        if (msg_fsw.eject_output.doors)
+            panel.door_1_neo = panel.door_2_neo = panel.doors_open_neo = GREEN;
+        if (msg_fsw.eject_output.payload)
+            panel.cansat_1_2_neo = panel.cansat_3_4_neo = GREEN;
+        if (msg_fsw.eject_output.drogue)
+            panel.drogue_neo = GREEN;
+        if (msg_fsw.eject_output.parachute)
+            panel.main_neo = GREEN;
+        if (msg_fsw.fsw_state.state == SM_STATE_READY)
+            panel.ready_to_launch_neo = GREEN;
+        else if (msg_fsw.fsw_state.state == SM_STATE_ARM)
+            panel.ready_to_launch_neo = RED;
+        else
+            panel.ready_to_launch_neo = OFF;
+
+        if (msg_fsw.fsw_state.state > SM_STATE_ARM)
+        {
+            if (panel.main_btn == 0)
+                panel.main_led = true;
+            if (panel.drogue_btn == 0)
+                panel.drogue_led = true;
+            if (panel.cansat_btn == 0)
+                panel.cansat_led = true;
+            if (panel.door_btn == 0)
+                panel.door_led = true;
+        }
+        else
+            panel.main_led = panel.drogue_led = panel.cansat_led = panel.door_led = false;
+
+        pthread_mutex_lock(&lora_send_data.lock);
+        lora_send_data.msg.main = panel.main_btn;
+        lora_send_data.msg.drogue = panel.drogue_btn;
+        lora_send_data.msg.cansat = panel.cansat_btn;
+        lora_send_data.msg.door = panel.door_btn;
+        pthread_mutex_unlock(&lora_send_data.lock);
+
+        if ((tNow - last_lora_msg_recieved_time) >= 1000)
+            panel.rockets_comms_neo = panel.radio_record_neo = RED;
+        else
+            panel.rockets_comms_neo = panel.radio_record_neo = GREEN;
+
+        if (panel.rbf_key_btn == 0)
+        {
+            panel.rbf_neo = RED;
+            pthread_mutex_lock(&lora_send_data.lock);
+            lora_send_data.msg.rbf = 0;
+            pthread_mutex_unlock(&lora_send_data.lock);
+        }
+        else if (panel.rbf_btn == 0)
+        {
+            panel.rbf_neo = ORANGE;
+            pthread_mutex_lock(&lora_send_data.lock);
+            lora_send_data.msg.rbf = 0;
+            pthread_mutex_unlock(&lora_send_data.lock);
+        }
+        else
+        {
+            panel.rbf_neo = GREEN;
+            pthread_mutex_lock(&lora_send_data.lock);
+            lora_send_data.msg.rbf = 1;
+            pthread_mutex_unlock(&lora_send_data.lock);
+        }
+
+        if (panel.main_led && panel.main_btn)
+        {
+            pthread_mutex_lock(&lora_send_data.lock);
+            lora_send_data.msg.main = 1;
+            lora_send_data.updated = true;
+            pthread_mutex_unlock(&lora_send_data.lock);
+            panel.main_led = false;
+        }
+
+        if (panel.drogue_led && panel.drogue_btn)
+        {
+            pthread_mutex_lock(&lora_send_data.lock);
+            lora_send_data.msg.drogue = 1;
+            lora_send_data.updated = true;
+            pthread_mutex_unlock(&lora_send_data.lock);
+            panel.drogue_led = false;
+        }
+
+        if (panel.cansat_led && panel.cansat_btn)
+        {
+            pthread_mutex_lock(&lora_send_data.lock);
+            lora_send_data.msg.cansat = 1;
+            lora_send_data.updated = true;
+            pthread_mutex_unlock(&lora_send_data.lock);
+            panel.cansat_led = false;
+        }
+
+        if (panel.door_led && panel.door_btn)
+        {
+            pthread_mutex_lock(&lora_send_data.lock);
+            lora_send_data.msg.door = 1;
+            lora_send_data.updated = true;
+            pthread_mutex_unlock(&lora_send_data.lock);
+            panel.door_led = false;
         }
 
         if (lora_recv_data.updated)
         {
             pthread_mutex_lock(&lora_recv_data.lock);
-            printf("\nReceived a lora msg: %d\n", lora_recv_data.msg.fsw_state.state);
-            recv_data.updated = false;
+            memcpy(&msg_fsw, &lora_recv_data.msg, sizeof(sd_csv_data_t));
+            lora_recv_data.updated = false;
             pthread_mutex_unlock(&lora_recv_data.lock);
+            printf("msg_fsw: %d\n", lora_recv_data.msg.fsw_state.state);
+            last_lora_msg_recieved_time = tNow;
         }
 
         if ((tNow - last_lora_send_time) >= LORA_SEND_T_MS)
@@ -460,6 +650,7 @@ int main()
             last_lora_send_time = millis();
         }
 
+        /*
         if ((tNow - testT) >= 1000)
         {
             i = i > 5 ? 0 : i + 1;
@@ -470,6 +661,7 @@ int main()
             printf("main_led = %d, rbf_neo = %d     main_btn = %d, drogue_btn = %d\n", panel.main_led, panel.rbf_neo, panel.main_btn, panel.drogue_btn);
             testT = millis();
         }
+        */
 
         if ((tNow - last_can_send_time) >= CAN_SEND_T_MS)
         {

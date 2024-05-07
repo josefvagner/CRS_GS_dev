@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define CAN_MSG_FREQ 100
+#define CAN_MSG_FREQ 30
 #define LORA_MSG_FREQ 10
 
 #define CAN_SEND_T_MS (long long)(1000 / CAN_MSG_FREQ)
@@ -57,9 +57,22 @@ enum
     RED,
     GREEN,
     BLUE,
-    YELLOW,
     ORANGE,
 };
+
+// state number encoding
+typedef enum
+{
+    SM_STATE_INIT,
+    SM_STATE_READY,
+    SM_STATE_ARM,
+    SM_STATE_ASCENT,
+    SM_STATE_APOGEE,  // payload
+    SM_STATE_DESCENT, // drogue
+    SM_STATE_LANDING, // parachute
+    SM_STATE_LANDED,
+    SM_STATE_FAIL
+} SmState_e;
 
 typedef enum
 {

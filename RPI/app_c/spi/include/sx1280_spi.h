@@ -327,31 +327,6 @@ typedef struct sx1280_spi_t
     unsigned int state;
 } sx1280_spi_t;
 
-typedef struct
-{
-    float velocity;
-    float rel_alti;
-    float in_timestamp;
-    float out_timestamp;
-    float bmp_pres;
-    float bmp_temp;
-    float ina_curr;
-    float ina_volt;
-    float mpu_mag_x;
-    float mpu_mag_y;
-    float mpu_mag_z;
-    float mpu_accel_x;
-    float mpu_accel_y;
-    float mpu_accel_z;
-    float mpu_gyro_x;
-    float mpu_gyro_y;
-    float mpu_gyro_z;
-    uint8_t fsw_state;
-    uint8_t payload_released;
-    uint8_t drogue_released;
-    uint8_t parachute_released;
-} GsMsg_t;
-
 typedef struct sd_csv_data_state_t
 {
     uint8_t state;
@@ -414,10 +389,24 @@ typedef struct sd_csv_data_t
     sd_csv_data_ina_t ina_data;
 } sd_csv_data_t;
 
+typedef struct emergency_timer_data_t
+{
+    float main;
+    float drogue;
+    float cansat;
+    float door;
+} emergency_timer_data_t;
+
 typedef struct
 {
     uint8_t idx;
-} GsPingMsg_t;
+    uint8_t rbf;
+    uint8_t main;
+    uint8_t drogue;
+    uint8_t cansat;
+    uint8_t door;
+    emergency_timer_data_t emergency_timer;
+} GsLoraMsg_t;
 
 long long millis();
 

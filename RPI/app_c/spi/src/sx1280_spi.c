@@ -158,7 +158,7 @@ int ResetSx1280(sx1280_spi_t *dev)
     uint8_t packetParams[7] = {
         DF_PREAMBLE_LENGTH,
         DF_HEADER_TYPE,
-        (uint8_t)sizeof(GsPingMsg_t),
+        (uint8_t)sizeof(GsLoraMsg_t),
         DF_CYCLICAL_REDUNDANCY_CHECK,
         DF_CHIRP_INVERT,
         0x00,
