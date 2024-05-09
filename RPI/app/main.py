@@ -18,10 +18,10 @@ app.add_middleware(
 data = {}
 taskRunnig = False
 url = "http://czechrockets.euweb.cz/set.php"
-dd = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+dd = datetime.now().strftime("%d_%m_%Y-%H_%M_%S")
 
 logging.basicConfig(
-    level=logging.INFO, format="%(message)s", filename="fastApi.json", filemode="a"
+    level=logging.INFO, format="%(message)s", filename="logs/" + dd + ".json", filemode="a"
 )
 
 
