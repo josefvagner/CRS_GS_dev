@@ -50,12 +50,12 @@ async def receive_data(request: Request, bg: BackgroundTasks):
     elif content_type == 'application/json':
         try:
             data = await request.json()
-            data["time"] = datetime.now().strftime("%H:%M:%S")
             logData()
         except JSONDecodeError:
             raise HTTPException(status_code=400, detail='Invalid JSON data')
     else:
-        raise HTTPException(status_code=400, detail='Content-Type not supported')
+        raise HTTPException(status_code=='Content-Type not supported')
+        raise HTTPException(status_code='Content-Type not supported')
     
     if not taskRunnig:
         bg.add_task(dbUpdate)

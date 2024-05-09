@@ -9,7 +9,8 @@
 #define CAN_SEND_T_MS (long long)(1000 / CAN_MSG_FREQ)
 #define LORA_SEND_T_MS (long long)(1000 / LORA_MSG_FREQ)
 
-#define SERVER_IP "192.168.88.251"
+// #define SERVER_IP "192.168.88.251"
+#define SERVER_IP "0.0.0.0"
 #define SERVER_PORT 8000
 #define ENDPOINT "/json_update"
 
@@ -65,6 +66,7 @@ typedef enum
 {
     SM_STATE_INIT,
     SM_STATE_READY,
+    SM_STATE_WAIT_GS,
     SM_STATE_ARM,
     SM_STATE_ASCENT,
     SM_STATE_APOGEE,  // payload
@@ -73,6 +75,15 @@ typedef enum
     SM_STATE_LANDED,
     SM_STATE_FAIL
 } SmState_e;
+
+// Pyro ejection model
+typedef enum
+{
+    WAITING,  // wait for min timer
+    READY,    // wait for cnb command || or emergency timer
+    EJECTING, // executing
+    EJECTED,  // done
+} eject_state_e;
 
 typedef enum
 {

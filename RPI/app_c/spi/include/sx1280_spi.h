@@ -377,6 +377,14 @@ typedef struct sd_csv_data_ina_t
     float current;
 } sd_csv_data_ina_t;
 
+typedef struct sd_csv_gps_t
+{
+    bool is_connected;
+    uint8_t num_fixed_satellites;
+    float latitude;
+    float longitude;
+} sd_csv_gps_t;
+
 typedef struct sd_csv_data_t
 {
     unsigned int timestamp;
@@ -387,6 +395,7 @@ typedef struct sd_csv_data_t
     sd_csv_data_pos_t pos_data;
     sd_csv_data_bno_t bno_data;
     sd_csv_data_ina_t ina_data;
+    sd_csv_gps_t gps_data;
 } sd_csv_data_t;
 
 typedef struct emergency_timer_data_t
@@ -400,13 +409,19 @@ typedef struct emergency_timer_data_t
 typedef struct
 {
     uint8_t idx;
-    uint8_t rbf;
-    uint8_t main;
-    uint8_t drogue;
-    uint8_t cansat;
-    uint8_t door;
-    emergency_timer_data_t emergency_timer;
+    // uint8_t rbf;
+    uint8_t fsw_state;
+    // uint8_t main;
+    // uint8_t drogue;
+    // uint8_t cansat;
+    // uint8_t door;
+    // emergency_timer_data_t emergency_timer;
 } GsLoraMsg_t;
+
+typedef struct
+{
+    uint8_t idx;
+} GsTestMsg_t;
 
 long long millis();
 
