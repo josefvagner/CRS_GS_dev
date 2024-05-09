@@ -12,8 +12,8 @@ int main()
     sleep_ms(1000);
     printf("starting....TX\n");
 
-    // sx1280_spi_t dev = {spi0, 19, 16, 18, 17, 7, 6, 1, 2, 3, STANDBY_RC};
-    sx1280_spi_t dev = {spi0, 20, 19, 18, 21, 24, 26, 1, 0, 27, STANDBY_RC};
+    sx1280_spi_t dev = {spi0, 19, 16, 18, 17, 7, 6, 1, 2, 3, STANDBY_RC};
+    // sx1280_spi_t dev = {spi0, 20, 19, 18, 21, 24, 26, 1, 0, 27, STANDBY_RC};
 
     Sx1280SPIInit(&dev);
     WaitForSetup(&dev);
